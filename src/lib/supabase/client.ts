@@ -23,6 +23,12 @@ export function friendlyError(error: unknown): string {
   if (/row-level security/i.test(message)) {
     return "Not allowed right now. Ordering may be closed, or this isn't yours to change.";
   }
+  if (/anonymous sign-ins are disabled/i.test(message)) {
+    return "Guest access isn't switched on yet. Please sign in or create an account.";
+  }
+  if (/rate limit|too many requests/i.test(message)) {
+    return "Too many people joined from this network just now. Wait a minute and try again.";
+  }
   if (/JWT|not signed in|sign in/i.test(message)) return "Please sign in again.";
   if (/Failed to fetch|NetworkError/i.test(message)) return "No connection. Check your internet and try again.";
   return message;

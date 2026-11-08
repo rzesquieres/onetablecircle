@@ -3,8 +3,9 @@ import { createServerClient } from "@supabase/ssr";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabaseConfigured } from "@/lib/supabase/env";
 import { publicOrigin } from "@/lib/site";
 
-// Pages that need a signed-in user.
-const PROTECTED = [/^\/s\//, /^\/j\//];
+// Pages that need a session (a real account or a quick guest).
+// /j/<code> is open: the join page itself offers "join as guest" or sign in.
+const PROTECTED = [/^\/s\//];
 
 export async function proxy(request: NextRequest) {
   if (!supabaseConfigured) return NextResponse.next();

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { QrCode } from "@/components/qr-code";
 import { Button, Card, Chip, Input, Label, Notice } from "@/components/ui";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
 import { timeOf, type TabProps } from "./tab-props";
@@ -57,10 +58,13 @@ export function PeopleTab({ data, me, isHost, ordersOpen, reload }: TabProps) {
   return (
     <div className="flex flex-col gap-6">
       <Card className="flex flex-col gap-3">
-        <p className="text-sm text-ink-soft">Invite people with this code or link</p>
-        <p className="text-center font-mono text-3xl font-bold tracking-[0.2em]">{session.join_code}</p>
+        <p className="text-center text-sm text-ink-soft">Scan to join this table</p>
+        <QrCode value={joinUrl} label={`QR code to join ${session.title}`} />
+        <p className="text-center font-mono text-2xl font-bold tracking-[0.2em]">{session.join_code}</p>
         <Button onClick={share}>{copied ? "Link copied ✓" : "Share invite link"}</Button>
-        <p className="text-xs text-ink-soft">They&apos;ll need to sign in. QR codes and quick guest access come in Phase 2.</p>
+        <p className="text-center text-xs text-ink-soft">
+          No account needed: people can join as a guest with just their name.
+        </p>
       </Card>
 
       {error && <Notice tone="error">{error}</Notice>}

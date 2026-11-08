@@ -18,7 +18,7 @@ const STATUS_LABEL: Record<Session["status"], string> = {
 
 export function HomeScreen() {
   const router = useRouter();
-  const { user, displayName, loading } = useUser();
+  const { user, isGuest, displayName, loading } = useUser();
   const [sessions, setSessions] = useState<Session[] | null>(null);
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
@@ -96,12 +96,22 @@ export function HomeScreen() {
         <p>
           Hi, <span className="font-semibold">{displayName}</span>
         </p>
-        <button onClick={signOut} className="min-h-11 px-2 text-sm text-ink-soft">Sign out</button>
+        {!isGuest && (
+          <button onClick={signOut} className="min-h-11 px-2 text-sm text-ink-soft">Sign out</button>
+        )}
       </div>
 
-      <Link href="/s/new" className="inline-flex min-h-14 items-center justify-center rounded-xl bg-brand px-4 text-lg font-semibold text-white active:bg-brand-strong">
-        Start a table
-      </Link>
+      {isGuest ? (
+        <Notice>
+          You joined as a guest, so your tables are saved on this phone only.{" "}
+          <Link href="/login" className="font-medium text-brand">Sign in or create an account</Link> to host your own
+          table.
+        </Notice>
+      ) : (
+        <Link href="/s/new" className="inline-flex min-h-14 items-center justify-center rounded-xl bg-brand px-4 text-lg font-semibold text-white active:bg-brand-strong">
+          Start a table
+        </Link>
+      )}
       {joinForm}
 
       {error && <Notice tone="error">{error}</Notice>}

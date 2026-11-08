@@ -3,35 +3,9 @@
  * minimal stand-in for Supabase's `auth` schema, then checks the security
  * rules from different users' points of view.
  */
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { beforeAll, describe, expect, it } from "vitest";
-
-const migration = readFileSync(
-  fileURLToPath(new URL("../migrations/20261108000000_phase1.sql", import.meta.url)),
-  "utf8",
-);
-
-const SUPABASE_STUB = `
-  create role anon nologin;
-  create role authenticated nologin;
-  create schema auth;
-  grant usage on schema auth to anon, authenticated;
-  grant usage on schema public to anon, authenticated;
-  create table auth.users (
-    id uuid primary key,
-    email text,
-    raw_user_meta_data jsonb not null default '{}'
-  );
-  create function auth.uid() returns uuid language sql stable as $$
-    select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
-  $$;
-  create publication supabase_realtime;
-  -- Supabase grants table access to these roles by default; mimic that so
-  -- the migration's explicit revokes are actually tested.
-  alter default privileges in schema public grant all on tables to anon, authenticated;
-`;
+import { as as asUser, createTestDb } from "./db";
 
 const HOST = "00000000-0000-0000-0000-00000000000a";
 const FRIEND = "00000000-0000-0000-0000-00000000000b";
@@ -39,14 +13,7 @@ const STRANGER = "00000000-0000-0000-0000-00000000000c";
 
 let db: PGlite;
 
-async function as<T>(userId: string, fn: () => Promise<T>): Promise<T> {
-  await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${userId}', false);`);
-  try {
-    return await fn();
-  } finally {
-    await db.exec(`reset role; select set_config('request.jwt.claim.sub', '', false);`);
-  }
-}
+const as = <T>(userId: string, fn: () => Promise<T>): Promise<T> => asUser(db, userId, fn);
 
 async function one<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T> {
   const res = await db.query<T>(sql, params);
@@ -63,9 +30,7 @@ let hostPid: string;
 let friendPid: string;
 
 beforeAll(async () => {
-  db = new PGlite();
-  await db.exec(SUPABASE_STUB);
-  await db.exec(migration);
+  db = await createTestDb();
   await db.query(
     `insert into auth.users (id, email, raw_user_meta_data) values
        ($1, 'host@example.com', '{"full_name":"Ronnel"}'),

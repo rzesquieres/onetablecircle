@@ -3,8 +3,9 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button, Chip, Input, Label, Notice } from "@/components/ui";
+import { Button, Chip, Input, Label, Notice, Spinner } from "@/components/ui";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
+import { useUser } from "@/lib/use-user";
 
 const CUTOFFS = [
   { label: "No cutoff", minutes: 0 },
@@ -15,6 +16,7 @@ const CUTOFFS = [
 
 export function NewTableForm() {
   const router = useRouter();
+  const { isGuest, loading } = useUser();
   const [title, setTitle] = useState("");
   const [serviceCharge, setServiceCharge] = useState("10");
   const [cutoffMinutes, setCutoffMinutes] = useState(0);
@@ -50,6 +52,25 @@ export function NewTableForm() {
       setError(friendlyError(err));
       setBusy(false);
     }
+  }
+
+  if (loading) return <Spinner />;
+  if (isGuest) {
+    return (
+      <div className="mt-6 flex flex-col gap-4">
+        <Notice>
+          You&apos;re using OneTableCircle as a guest. To host your own table, sign in or create a free account. (Your
+          guest tables stay on this phone until you sign out.)
+        </Notice>
+        <Link
+          href="/login?next=/s/new"
+          className="inline-flex min-h-12 items-center justify-center rounded-xl bg-brand px-4 font-semibold text-white"
+        >
+          Sign in or create account
+        </Link>
+        <Link href="/" className="text-center text-sm text-ink-soft">Back</Link>
+      </div>
+    );
   }
 
   return (
