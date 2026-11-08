@@ -65,8 +65,8 @@ In hPanel: your website dashboard → **Environment variables** → **Add enviro
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Phase 1 | Supabase → **Connect** → Publishable key (`sb_publishable_...`) | no (designed to be public) |
 | `SUPABASE_SECRET_KEY` | later (admin/AI jobs) | Supabase → Project Settings → API Keys → Secret key (`sb_secret_...`) | **YES**, never share |
 | `NEXT_PUBLIC_GOOGLE_SIGNIN` | once Google is enabled in Supabase | `on` shows the "Continue with Google" button; leave unset to hide it | no |
-| `ANTHROPIC_API_KEY` | Phase 4 | <https://console.anthropic.com> → API Keys | **YES** |
-| `ANTHROPIC_MODEL` | Phase 4 | `claude-sonnet-5-5` | no |
+| `ANTHROPIC_API_KEY` | Phase 4 (AI menu import) | <https://console.anthropic.com> → API Keys | **YES**, never share |
+| `ANTHROPIC_MODEL` | optional | Leave unset to use `claude-opus-5-5`. Set `claude-sonnet-5-5` to halve the cost per import. | no |
 
 Important:
 - `NEXT_PUBLIC_*` values are **baked in at build time**. Set them in Hostinger *before* the deploy that needs them. If you change one later, Hostinger's automatic redeploy picks it up.

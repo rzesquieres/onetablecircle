@@ -7,6 +7,27 @@ import { Button, Card, Input, Label, Notice, Spinner } from "@/components/ui";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
 import type { Store } from "@/lib/types";
 import { AdminGate, STATUS_STYLE } from "./admin-gate";
+import { AiAddStoreCard, RecentImports } from "./ai-import";
+
+/** "3 open problem reports" banner, shown only when there are some. */
+function OpenReportsLink() {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    getSupabase()
+      .from("menu_reports")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "open")
+      .then(({ count }) => setCount(count ?? 0));
+  }, []);
+  if (!count) return null;
+  return (
+    <Link href="/admin/reports">
+      <Notice tone="warn">
+        {count} open problem report{count === 1 ? "" : "s"} from users. Review them →
+      </Notice>
+    </Link>
+  );
+}
 
 export function AdminHome() {
   return (
@@ -63,6 +84,10 @@ function StoreList() {
         <h1 className="text-2xl font-semibold">Stores & menus</h1>
         <Link href="/" className="text-sm text-ink-soft">Home</Link>
       </div>
+
+      <OpenReportsLink />
+      <AiAddStoreCard />
+      <RecentImports />
 
       <Card>
         <form onSubmit={create} className="flex flex-col gap-3 sm:flex-row sm:items-end">

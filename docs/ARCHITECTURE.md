@@ -5,8 +5,19 @@ Implemented so far, one migration per phase in `supabase/migrations/`:
 - Phase 1: `20261108000000_phase1.sql` (sessions, ordering, delivery checklist)
 - Phase 2: `20261108100000_phase2_guests.sql` (quick guests via anonymous sign-in, table preview, hosts must be real accounts)
 - Phase 3: `20261109000000_phase3_menus.sql` (organizations, stores, menus, option groups, server-side menu pricing `add_menu_item()`, menu photos bucket, admin flag)
+- Phase 4: `20261109100000_phase4_ai_import.sql` (`menu_import_jobs`, `apply_menu_import()`, `menu_reports`)
 
-Tables for later phases (menu reports, AI import jobs, receipts, bill shares, payments, saved groups, favorites) are still a plan and get added in their own migrations. `menu_reports` moves to Phase 4, alongside AI drafts.
+### AI menu import (Phase 4)
+1. An admin starts a job in one of three ways: **AI add store** (a name), **from a link**, or **from photos/PDFs**. This calls `POST /api/admin/menu-import`. The route checks the session and `can_manage_import()`, inserts a `menu_import_jobs` row, and returns at once.
+2. The AI work runs in Next.js `after()`, in the same Node process on Hostinger:
+   - A link is fetched server-side, with checks that refuse private network addresses and limit size. Web pages become text; PDFs and images become document and image blocks.
+   - **AI add store** first runs a research call with Claude's `web_search` and `web_fetch` server tools, then extracts from that text.
+   - Extraction uses structured output (a JSON schema), and the app validates the result with zod. Prices come back as text and become integer centavos only in `menu-draft.ts`.
+   - Model `claude-opus-5-5` (override with `ANTHROPIC_MODEL`), effort `medium`, streamed, with server-side refusal fallback (`fallbacks: "default"`). Paused turns (`pause_turn`) are resumed.
+3. The review page `/admin/imports/<id>` checks the job until it is `ready`. The admin ticks, edits and prices items, then calls `apply_menu_import()`, which writes everything in one transaction with `price_status = 'estimated'`. New stores are created as **drafts**.
+4. Users flag wrong items from the item sheet (`menu_reports`). Admins handle them at `/admin/reports`.
+
+Tables for later phases (receipts, bill shares, payments, saved groups, favorites) are still a plan and get added in their own migrations.
 
 ## 1. Stack
 

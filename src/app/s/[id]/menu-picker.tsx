@@ -230,6 +230,7 @@ function ItemSheet({
               <Input id="sheet-notes" maxLength={200} placeholder="e.g. less ice" value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
             <ForWhom state={who} people={data.participants} meId={me.id} />
+            <ReportProblem storeId={menu.store.id} itemId={item.id} />
           </div>
         </div>
 
@@ -243,6 +244,67 @@ function ItemSheet({
             </Button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+const REPORT_KINDS = [
+  { kind: "wrong_price", label: "Wrong price" },
+  { kind: "wrong_item", label: "Wrong name or details" },
+  { kind: "unavailable", label: "No longer sold" },
+  { kind: "other", label: "Something else" },
+] as const;
+
+/** Lets anyone at the table flag a menu item that looks wrong; admins see it in Admin -> Problem reports. */
+function ReportProblem({ storeId, itemId }: { storeId: string; itemId: string }) {
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<(typeof REPORT_KINDS)[number]["kind"]>("wrong_price");
+  const [note, setNote] = useState("");
+  const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
+  const [error, setError] = useState("");
+
+  async function send() {
+    setState("sending");
+    setError("");
+    const { error } = await getSupabase()
+      .from("menu_reports")
+      .insert({ store_id: storeId, menu_item_id: itemId, kind, note: note.trim() });
+    if (error) {
+      setError(friendlyError(error));
+      setState("idle");
+      return;
+    }
+    setState("sent");
+  }
+
+  if (state === "sent") return <p className="text-sm text-ink-soft">Thanks! We&apos;ll check this item.</p>;
+  if (!open) {
+    return (
+      <button type="button" className="min-h-11 self-start text-sm text-ink-soft underline" onClick={() => setOpen(true)}>
+        Report a problem with this item
+      </button>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl border border-line p-3">
+      <p className="text-sm font-medium">What&apos;s wrong?</p>
+      <div className="flex flex-wrap gap-2">
+        {REPORT_KINDS.map((k) => (
+          <Chip key={k.kind} selected={kind === k.kind} onClick={() => setKind(k.kind)}>
+            {k.label}
+          </Chip>
+        ))}
+      </div>
+      <Input maxLength={500} placeholder="Details (e.g. menu now says ₱195)" value={note} onChange={(e) => setNote(e.target.value)} />
+      {error && <Notice tone="error">{error}</Notice>}
+      <div className="flex gap-2">
+        <Button type="button" variant="secondary" className="min-h-11 text-sm" disabled={state === "sending"} onClick={send}>
+          {state === "sending" ? "Sending…" : "Send report"}
+        </Button>
+        <Button type="button" variant="ghost" className="min-h-11 text-sm" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
       </div>
     </div>
   );

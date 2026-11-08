@@ -10,6 +10,7 @@ import { fetchMenu } from "@/lib/use-menu";
 import { deleteMenuPhoto } from "@/lib/photos";
 import type { Menu, StoreStatus } from "@/lib/types";
 import { AdminGate, STATUS_STYLE } from "../../admin-gate";
+import { AiImportCard } from "../../ai-import";
 import type { EditorProps } from "./editor-context";
 import { OptionGroupsEditor } from "./option-groups-editor";
 import { MenuSectionsEditor } from "./menu-sections-editor";
@@ -93,6 +94,7 @@ function Editor() {
       )}
 
       <DetailsSection {...props} />
+      <AiImportCard storeId={menu.store.id} />
       <MenuSectionsEditor {...props} />
       <OptionGroupsEditor {...props} />
       <DangerZone {...props} />
