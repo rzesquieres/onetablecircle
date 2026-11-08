@@ -11,7 +11,10 @@ Supabase is the app's database and login system. You do this setup once, and it 
    - **Database password:** click **Generate**, then save it in your password manager. The app doesn't need it, but you may need it later.
    - **Region:** **Southeast Asia (Singapore)**. It's the closest to the Philippines, so the app feels faster.
    - **Plan:** Free.
+   - **Security:** keep **Enable Data API** on. Turn **Automatically expose new tables** off (Supabase recommends this); the database file grants exactly the access the app needs.
 3. Wait about 2 minutes for it to finish setting up.
+
+> Already done for the live project: `onetablecircle` (ref `xepnrdehcgfylrfwowxp`, Singapore), set up on 2026-11-08 with steps 1–4 and 6 below. Google sign-in (step 5) is not set up yet.
 
 ## 2. Create the database tables
 1. In the left sidebar, open **SQL Editor** → **New query**.

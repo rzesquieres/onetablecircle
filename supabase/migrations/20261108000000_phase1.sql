@@ -431,6 +431,16 @@ begin
   return v_item;
 end $$;
 
+-- Policy helpers must be callable by signed-in users (explicit, in case the
+-- project does not grant function access by default).
+grant usage on schema public to authenticated;
+grant execute on function public.is_session_member(uuid) to authenticated;
+grant execute on function public.is_session_host(uuid) to authenticated;
+grant execute on function public.my_participant_id(uuid) to authenticated;
+grant execute on function public.session_accepts_orders(uuid) to authenticated;
+grant execute on function public.session_is_active(uuid) to authenticated;
+grant execute on function public.can_edit_items(uuid, uuid) to authenticated;
+
 revoke execute on function public.join_session(text, text) from public, anon;
 revoke execute on function public.add_order_item(uuid, text, bigint, integer, text, boolean, uuid[]) from public, anon;
 grant execute on function public.join_session(text, text) to authenticated;
