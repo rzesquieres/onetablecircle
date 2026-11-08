@@ -14,7 +14,7 @@ Supabase is the app's database and login system. You do this setup once, and it 
    - **Security:** keep **Enable Data API** on. Turn **Automatically expose new tables** off (Supabase recommends this); the database file grants exactly the access the app needs.
 3. Wait about 2 minutes for it to finish setting up.
 
-> Already done for the live project: `onetablecircle` (ref `xepnrdehcgfylrfwowxp`, Singapore), set up on 2026-11-08 with steps 1–4 and 6 below. Google sign-in (step 5) is not set up yet.
+> Already done for the live project: `onetablecircle` (ref `xepnrdehcgfylrfwowxp`, Singapore), set up on 2026-11-08 with all steps below. Google sign-in uses Google Cloud project `onetablecircle` (OAuth client "OneTableCircle web"; consent screen in **Testing** mode, so only listed test users can sign in until you click **Publish app** under Google Auth Platform → Audience). The support email is rzesquieres@gmail.com for now; switch it to admin@onetablecircle.com under **Branding** once that address is a Google account with Owner access to the project. The live site shows the Google button because Hostinger has `NEXT_PUBLIC_GOOGLE_SIGNIN=on`.
 
 ## 2. Create the database tables
 1. In the left sidebar, open **SQL Editor** → **New query**.
