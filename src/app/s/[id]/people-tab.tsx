@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { QrCode } from "@/components/qr-code";
 import { Button, Card, Chip, Input, Label, Notice } from "@/components/ui";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
@@ -128,6 +129,56 @@ export function PeopleTab({ data, me, isHost, ordersOpen, reload }: TabProps) {
           </p>
         </section>
       )}
+
+      {isHost && <DeleteTable sessionId={session.id} title={session.title} people={participants.length} items={data.items.length} />}
     </div>
+  );
+}
+
+/** Two-step delete (no browser pop-up): first tap explains, second tap deletes. */
+function DeleteTable({ sessionId, title, people, items }: { sessionId: string; title: string; people: number; items: number }) {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function remove() {
+    setBusy(true);
+    setError("");
+    const { data, error } = await getSupabase().from("sessions").delete().eq("id", sessionId).select("id");
+    if (error || !data?.length) {
+      setError(error ? friendlyError(error) : "Couldn't delete this table. Only the host can delete it.");
+      setBusy(false);
+      return;
+    }
+    router.replace("/");
+  }
+
+  return (
+    <section className="mt-2 flex flex-col gap-3 border-t border-line pt-6">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-danger">Delete table</h2>
+      {!confirming ? (
+        <Button variant="secondary" className="text-danger" onClick={() => setConfirming(true)}>
+          Delete this table…
+        </Button>
+      ) : (
+        <Card className="flex flex-col gap-3 border-danger/40">
+          <p className="text-sm">
+            Delete <span className="font-semibold">{title}</span> for everyone? This removes all {items}{" "}
+            {items === 1 ? "order" : "orders"} and {people} {people === 1 ? "person" : "people"} from it, and it can&apos;t be
+            undone.
+          </p>
+          {error && <Notice tone="error">{error}</Notice>}
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setConfirming(false)} disabled={busy}>
+              Keep it
+            </Button>
+            <Button className="flex-1 bg-danger active:bg-danger" onClick={remove} disabled={busy}>
+              {busy ? "Deleting…" : "Yes, delete"}
+            </Button>
+          </div>
+        </Card>
+      )}
+    </section>
   );
 }

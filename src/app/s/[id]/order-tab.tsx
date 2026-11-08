@@ -67,10 +67,19 @@ export function OrderTab({ data, me, isHost, ordersOpen, reload }: TabProps) {
     void reload();
   }
 
+  // Two taps to remove: the first arms the button, the second deletes.
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+
   async function remove(itemId: string) {
+    if (confirmId !== itemId) {
+      setConfirmId(itemId);
+      return;
+    }
+    setConfirmId(null);
     setError("");
-    const { error } = await getSupabase().from("order_items").delete().eq("id", itemId);
+    const { data: deleted, error } = await getSupabase().from("order_items").delete().eq("id", itemId).select("id");
     if (error) setError(friendlyError(error));
+    else if (!deleted?.length) setError("Couldn't remove that item. Ordering may have closed.");
     void reload();
   }
 
@@ -167,11 +176,24 @@ export function OrderTab({ data, me, isHost, ordersOpen, reload }: TabProps) {
                       <span className="text-sm tabular-nums">
                         {item.unit_price_centavos === null ? "—" : formatMoney(item.unit_price_centavos * item.quantity, currency)}
                       </span>
-                      {canEdit(item.added_by) && (
-                        <Button variant="danger" className="min-h-9 px-2 text-sm" onClick={() => remove(item.id)}>
-                          Remove
-                        </Button>
-                      )}
+                      {canEdit(item.added_by) &&
+                        (confirmId === item.id ? (
+                          <div className="flex gap-1">
+                            <Button variant="ghost" className="min-h-9 px-2 text-sm" onClick={() => setConfirmId(null)}>
+                              Keep
+                            </Button>
+                            <Button
+                              className="min-h-9 bg-danger px-2 text-sm active:bg-danger"
+                              onClick={() => remove(item.id)}
+                            >
+                              {item.added_by === me.id ? "Remove" : `Remove ${nameOf(data, item.added_by)}'s`}
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button variant="danger" className="min-h-9 px-2 text-sm" onClick={() => remove(item.id)}>
+                            Remove
+                          </Button>
+                        ))}
                     </div>
                   </Card>
                 </li>

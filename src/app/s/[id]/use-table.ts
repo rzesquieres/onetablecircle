@@ -39,7 +39,7 @@ export function useTable(sessionId: string) {
       return;
     }
     if (!s.data) {
-      setError("This table doesn't exist, or you're not part of it. Ask the host for the join link.");
+      setError("This table was deleted, or you're not part of it. Ask the host for the join link.");
       return;
     }
     setError("");

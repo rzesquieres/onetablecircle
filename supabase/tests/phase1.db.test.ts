@@ -277,6 +277,42 @@ describe("ordering", () => {
     );
   });
 
+  it("only the host can delete the whole table, and it removes everything in it", async () => {
+    const del = await as(FRIEND, () => rows("delete from public.sessions where id = $1 returning id", [sessionId]));
+    expect(del).toHaveLength(0);
+
+    // A second table with items, shared items and ticks, then deleted by its host.
+    const t = await as(HOST, () =>
+      one<{ id: string; join_code: string }>(
+        `insert into public.sessions (host_id, title) values ($1, 'To delete') returning id, join_code`,
+        [HOST],
+      ),
+    );
+    await as(FRIEND, () => db.query("select public.join_session($1)", [t.join_code]));
+    const pids = await as(HOST, () =>
+      rows<{ id: string }>("select id from public.participants where session_id = $1 order by joined_at", [t.id]),
+    );
+    const item = await as(FRIEND, () =>
+      one<{ id: string }>("select public.add_order_item($1, 'Halo-halo', 16000, 2, '', true, $2) as id", [
+        t.id,
+        pids.map((p) => p.id),
+      ]),
+    );
+    await as(HOST, () =>
+      db.query("insert into public.delivery_events (order_item_id, delta, by_participant_id) values ($1, 1, $2)", [
+        item.id,
+        pids[0].id,
+      ]),
+    );
+
+    const gone = await as(HOST, () => rows("delete from public.sessions where id = $1 returning id", [t.id]));
+    expect(gone).toHaveLength(1);
+    for (const table of ["participants", "order_items", "order_item_assignees", "delivery_events"]) {
+      const left = await db.query(`select 1 from public.${table} where session_id = $1`, [t.id]);
+      expect(left.rows, table).toHaveLength(0);
+    }
+  });
+
   it("once billing starts, ticking stops", async () => {
     await as(HOST, () => db.query("update public.sessions set status = 'billing' where id = $1", [sessionId]));
     await expect(
