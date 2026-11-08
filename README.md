@@ -20,3 +20,6 @@ Secrets go in `.env.local`, which is never committed. The variable list is in [d
 
 ## Deployment
 Push to `main` on GitHub and Hostinger builds and deploys automatically. One-time setup: [docs/DEPLOY-HOSTINGER.md](docs/DEPLOY-HOSTINGER.md).
+
+## License
+Proprietary. All rights reserved. See [LICENSE](LICENSE).
