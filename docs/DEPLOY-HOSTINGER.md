@@ -53,7 +53,7 @@ The home page should show "OneTableCircle — Order together, split fairly."
 ---
 
 ## Environment variables (secrets and settings)
-Phase 0 (this setup) doesn't need any. You'll add them when Phase 1 starts. Keep this list in a `.env.example` file in the repo as the reference.
+Phase 1 needs `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Without them the site still runs, but shows "Supabase keys are missing".
 
 In hPanel: your website dashboard → **Environment variables** → **Add environment variable**, or **Import .env** to upload a file. **Saving triggers a redeploy.**
 
@@ -61,9 +61,9 @@ In hPanel: your website dashboard → **Environment variables** → **Add enviro
 |---|---|---|---|
 | `NEXT_PUBLIC_SITE_URL` | Phase 1 | Your site address, e.g. `https://onetablecircle.com` (no trailing slash) | no |
 | `NEXT_PUBLIC_DEFAULT_CURRENCY` | Phase 1 | `PHP` | no |
-| `NEXT_PUBLIC_SUPABASE_URL` | Phase 1 | Supabase → Project Settings → API | no |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Phase 1 | Supabase → Project Settings → API (the "anon / public" key) | no (designed to be public) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Phase 1 | Supabase → Project Settings → API (the "service_role" key) | **YES**, never share |
+| `NEXT_PUBLIC_SUPABASE_URL` | Phase 1 | Supabase → **Connect** → Project URL | no |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Phase 1 | Supabase → **Connect** → Publishable key (`sb_publishable_...`) | no (designed to be public) |
+| `SUPABASE_SECRET_KEY` | later (admin/AI jobs) | Supabase → Project Settings → API Keys → Secret key (`sb_secret_...`) | **YES**, never share |
 | `ANTHROPIC_API_KEY` | Phase 4 | <https://console.anthropic.com> → API Keys | **YES** |
 | `ANTHROPIC_MODEL` | Phase 4 | `claude-sonnet-5-5` | no |
 
@@ -83,8 +83,5 @@ Important:
 - CPU and RAM are capped by your plan. Live updates run on Supabase, not Hostinger, so this app is light on Hostinger resources.
 - Supabase free tier pauses a project after about a week with no activity. Click **Restore** in Supabase if that happens, or upgrade when you start selling.
 
-## Later (Phase 1 setup you'll do yourself, guided step by step then)
-- Create a Supabase project (choose region **Southeast Asia (Singapore)**, closest to the Philippines).
-- Turn on Email, Google and Anonymous sign-in in Supabase Auth.
-- Create a Google OAuth client in Google Cloud Console and paste it into Supabase.
-- Add your Hostinger domain to Supabase **Auth → URL Configuration** (Site URL + Redirect URLs).
+## Supabase and Google sign-in
+See [SETUP-SUPABASE.md](SETUP-SUPABASE.md).

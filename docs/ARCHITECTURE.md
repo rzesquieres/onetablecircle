@@ -1,6 +1,7 @@
-# Architecture & data model (PROPOSAL — awaiting approval)
+# Architecture & data model
 
-Status: draft for review. No feature code is written until this is confirmed.
+Status: **approved 2026-11-08** (Supabase backend; optional tip line; the host confirms payments).
+Phase 1 is implemented in `supabase/migrations/20261108000000_phase1.sql`. Tables for later phases are still a plan and get added in their own migrations.
 
 ## 1. Stack
 
@@ -27,9 +28,10 @@ Phone browser ──HTTPS──> Hostinger (Next.js: pages, server actions, AI c
 - **Guests:** "quick guest" uses **Supabase anonymous sign-in**, so every participant has a real `auth.uid()` and one set of security rules covers everyone. A guest can later link email or Google and keep their history.
 - **Joining:** each session has a short random `join_code`. `/j/<code>` and its QR code call a secured database function `join_session(code, name)`. You can't list or guess other sessions.
 - **Price snapshots:** an order item copies its name, unit price and chosen options at order time. Later menu edits don't change past bills.
-- **Grouping for the waiter:** every order line gets a `line_signature` (item + sorted options + notes). Identical lines group as "3× Iced Latte (Grande, Oat, 50% sugar)".
+- **Grouping for the waiter:** the app computes a group key from the name, notes and price (plus sorted options from Phase 3), so identical lines group as "3× Iced Latte (Grande, Oat, 50% sugar)". See `src/lib/consolidate.ts`.
+- **Ticking a grouped line:** a ✓ applies to the oldest item in the group that isn't fully served yet. An untick applies to the newest served one. The database keeps the served count between 0 and the quantity.
 - **Delivery audit:** ticks are an append-only log (`delivery_events`, +1 or −1 each, with who and when). The served count is the sum. Unticking is just a −1, and the full history is kept.
-- **Bill split:** pure TypeScript functions in `src/lib/split/`. Shared items split by weight (equal by default). Service charge, tax and discounts are spread in proportion to each person's subtotal. Leftover centavos go to people in a fixed, deterministic order (largest remainder, then participant join order), so the totals always add up exactly to the receipt.
+- **Bill split:** pure TypeScript functions in `src/lib/split/`. Shared items split by weight (equal by default). Service charge, tax, discounts and the optional **tip** are spread in proportion to each person's subtotal. Leftover centavos go to people in a fixed, deterministic order (largest remainder, then participant join order), so the totals always add up exactly to the receipt.
 - **Multi-tenant ready:** stores belong to an `organization`. Today one platform org owns all stores and admins manage them. Later, a store owner's org manages its own menus, and `subscriptions` attach to orgs.
 
 ## 3. Data model (Postgres)
@@ -55,16 +57,16 @@ Every table has `id uuid` primary key and `created_at`. FK = foreign key.
 
 ### Sessions & ordering
 - **sessions** — `host_id`, `store_id?` (null = free-text only), `title`, `join_code`, `status` (`open` | `closed` | `billing` | `settled`), `order_cutoff_at?`, `currency`, `service_charge_bps`, `closed_at`
-- **participants** — `session_id`, `user_id`, `display_name`, `is_host`, `joined_at`
-- **order_items** — `session_id`, `added_by` (participant), `menu_item_id?`, `name` (snapshot or free text), `unit_price_centavos?` (null = unknown price), `quantity`, `options jsonb` (snapshot), `notes`, `line_signature`, `is_shared`, `price_is_estimate bool`
-- **order_item_assignees** — `order_item_id`, `participant_id`, `share_weight int` (default 1). One row = ordered for that person (covers "on behalf of"). Several rows = shared.
-- **delivery_events** — `order_item_id`, `delta` (+1 / −1), `by_participant_id`, `at`
+- **participants** — `session_id`, `user_id?` (null = added by the host by name, no phone), `display_name`, `is_host`, `joined_at`
+- **order_items** — `session_id`, `added_by` (participant), `menu_item_id?` *(Phase 3)*, `name` (snapshot or free text), `unit_price_centavos?` (null = unknown price), `quantity`, `options jsonb` *(Phase 3)*, `notes`, `is_shared`, `price_is_estimate bool` *(Phase 3)*
+- **order_item_assignees** — `order_item_id`, `participant_id`, `session_id`, `share_weight int` (default 1). One row = ordered for that person (covers "on behalf of"). Several rows = shared.
+- **delivery_events** — `order_item_id`, `session_id`, `delta` (+1 / −1), `by_participant_id`, `created_at`
 
 ### Bill & settle-up
-- **receipts** — `session_id`, `image_path`, `status` (`scanning` | `review` | `confirmed`), `subtotal_centavos`, `service_charge_centavos`, `tax_centavos`, `discount_centavos`, `total_centavos`, `ai_output jsonb`
+- **receipts** — `session_id`, `image_path`, `status` (`scanning` | `review` | `confirmed`), `subtotal_centavos`, `service_charge_centavos`, `tax_centavos`, `discount_centavos`, `tip_centavos`, `total_centavos`, `ai_output jsonb`
 - **receipt_lines** — `receipt_id`, `description`, `quantity`, `amount_centavos`, `sort_order`
 - **receipt_line_matches** — `receipt_line_id`, `order_item_id`
-- **bill_shares** — `session_id`, `participant_id`, `items_centavos`, `service_centavos`, `tax_centavos`, `discount_centavos`, `total_centavos`, `breakdown jsonb` (frozen when the host finalises)
+- **bill_shares** — `session_id`, `participant_id`, `items_centavos`, `service_centavos`, `tax_centavos`, `discount_centavos`, `tip_centavos`, `total_centavos`, `breakdown jsonb` (frozen when the host finalises)
 - **payments** — `session_id`, `participant_id`, `marked_paid_at`, `confirmed_by_host_at?`
 
 ### Convenience & analytics
@@ -98,7 +100,8 @@ Storage buckets follow the same rules. Receipts and QR images are private, serve
 5. Receipt scan + bill split + settle up
 6. Saved groups, favorites, history, analytics
 
-## 6. Open questions for you
-1. Approve Supabase as the backend? (The alternative is self-hosting Postgres + auth on Hostinger. It's more work and costs more to run, so not recommended.)
-2. Tip: the brief mentions service charge, tax and discounts. Should tip be a separate, optional, proportional line too?
-3. Should the host **confirm** each "Paid" tap, or is the participant's tap enough?
+## 6. Decisions
+- Backend: Supabase (approved).
+- Tip: an optional line, split proportionally like the service charge.
+- Payments: a participant taps "Paid", and the host confirms (`payments.confirmed_by_host_at`).
+- Email sign-in uses email + password (Supabase's free email limit makes magic links unreliable). Google sign-in is offered alongside.

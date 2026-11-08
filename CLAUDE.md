@@ -17,8 +17,10 @@ Owner: Khukhu (Ronnel). It's for personal use first; the plan is to sell it late
 ## Tech stack
 - Hosting: Hostinger managed Node.js web app (Node 22), auto-deployed from GitHub `main`. See `docs/DEPLOY-HOSTINGER.md`.
 - Next.js 16 App Router + TypeScript + Tailwind. This Next version has breaking changes: read `node_modules/next/dist/docs/` before writing Next-specific code (see `AGENTS.md`).
-- Proposed (awaiting approval): Supabase for auth, Postgres + RLS, realtime and storage; Claude API for receipt and menu extraction. See `docs/ARCHITECTURE.md`.
-- Tests: Vitest (`npm test`). Money helpers are in `src/lib/money.ts`.
+- Supabase (approved): auth, Postgres + RLS, realtime and storage. Claude API for receipt and menu extraction (Phase 4–5). See `docs/ARCHITECTURE.md`.
+- Database changes go in new files under `supabase/migrations/` (never edit an applied one). The user applies them by pasting into the Supabase SQL Editor. RLS and trigger behaviour is tested with PGlite in `supabase/tests/`, which stubs `auth.uid()` and the `anon`/`authenticated` roles.
+- Browser code talks to Supabase directly (RLS enforces access). Live updates use Supabase Realtime, not the Hostinger server. Call `getSupabase()` only in effects and handlers, never during render, so the build works without keys.
+- Tests: Vitest (`npm test`). Pure logic is in `src/lib/` (money, consolidate, session-rules).
 
 ## Conventions
 - Calculate money in integer centavos. Never use floats for amounts.
