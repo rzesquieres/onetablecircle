@@ -64,6 +64,7 @@ In hPanel: your website dashboard → **Environment variables** → **Add enviro
 | `NEXT_PUBLIC_SUPABASE_URL` | Phase 1 | Supabase → **Connect** → Project URL | no |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Phase 1 | Supabase → **Connect** → Publishable key (`sb_publishable_...`) | no (designed to be public) |
 | `SUPABASE_SECRET_KEY` | later (admin/AI jobs) | Supabase → Project Settings → API Keys → Secret key (`sb_secret_...`) | **YES**, never share |
+| `NEXT_PUBLIC_GOOGLE_SIGNIN` | once Google is enabled in Supabase | `on` shows the "Continue with Google" button; leave unset to hide it | no |
 | `ANTHROPIC_API_KEY` | Phase 4 | <https://console.anthropic.com> → API Keys | **YES** |
 | `ANTHROPIC_MODEL` | Phase 4 | `claude-sonnet-5-5` | no |
 

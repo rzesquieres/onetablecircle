@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button, Input, Label, Notice } from "@/components/ui";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
-import { supabaseConfigured } from "@/lib/supabase/env";
+import { googleSignInEnabled, supabaseConfigured } from "@/lib/supabase/env";
 import { safeNextPath } from "@/lib/site";
 
 type Mode = "signin" | "signup";
@@ -79,13 +79,17 @@ export function LoginForm() {
 
   return (
     <div className="mt-6 flex flex-col gap-5">
-      <Button variant="secondary" onClick={google} disabled={busy}>
-        <GoogleIcon /> Continue with Google
-      </Button>
+      {googleSignInEnabled && (
+        <>
+          <Button variant="secondary" onClick={google} disabled={busy}>
+            <GoogleIcon /> Continue with Google
+          </Button>
 
-      <div className="flex items-center gap-3 text-sm text-ink-soft">
-        <span className="h-px flex-1 bg-line" /> or use email <span className="h-px flex-1 bg-line" />
-      </div>
+          <div className="flex items-center gap-3 text-sm text-ink-soft">
+            <span className="h-px flex-1 bg-line" /> or use email <span className="h-px flex-1 bg-line" />
+          </div>
+        </>
+      )}
 
       <form onSubmit={submit} className="flex flex-col gap-4">
         {mode === "signup" && (
