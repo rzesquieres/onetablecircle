@@ -77,6 +77,14 @@ Important:
 3. `git add . && git commit -m "..." && git push`. Hostinger rebuilds automatically within a minute or two.
 4. If a deploy fails: hPanel → **Deployments** → open the failed build → read the log. The previous version stays live until a build succeeds.
 
+## Why the build uses webpack
+Hostinger's build servers have an older system library (glibc < 2.29), so Next.js can't load its native compiler there. It falls back to a WebAssembly compiler, which Turbopack can't use. For that reason:
+- `npm run build` runs `next build --webpack`.
+- The config is plain JavaScript (`next.config.mjs`), not TypeScript.
+- Tailwind is loaded through PostCSS (`postcss.config.mjs`).
+
+Local `npm run dev` still uses Turbopack. Don't switch these back, or the Hostinger build fails with "Failed to load next.config" or "GLIBC_2.29 not found".
+
 ## Limits to know
 - Build steps time out after 15 minutes (ours takes about 1–2).
 - One deployment runs at a time. Later pushes queue up.
