@@ -18,7 +18,9 @@ Owner: Khukhu (Ronnel). It's for personal use first; the plan is to sell it late
 - Hosting: Hostinger managed Node.js web app (Node 22), auto-deployed from GitHub `main`. See `docs/DEPLOY-HOSTINGER.md`.
 - Next.js 16 App Router + TypeScript + Tailwind. This Next version has breaking changes: read `node_modules/next/dist/docs/` before writing Next-specific code (see `AGENTS.md`).
 - Supabase (approved): auth, Postgres + RLS, realtime and storage. Claude API for receipt and menu extraction (Phase 4–5). See `docs/ARCHITECTURE.md`.
-- Database changes go in new files under `supabase/migrations/` (never edit an applied one). The user applies them by pasting into the Supabase SQL Editor. RLS and trigger behaviour is tested with PGlite in `supabase/tests/`, which stubs `auth.uid()` and the `anon`/`authenticated` roles.
+- Database changes go in new files under `supabase/migrations/` (never edit an applied one). The user runs them in the Supabase SQL Editor; Claude's permissions block clicking Run on the live database. Run a migration before pushing app code that depends on it, or the live site breaks.
+- Platform admins have `profiles.is_platform_admin = true`, set only by SQL (users can't change it). The Phase 3 migration sets it for rzesquieres@gmail.com and admin@onetablecircle.com.
+- Check what's live with https://onetablecircle.com/api/health. Its `commit` field shows the deployed git commit. RLS and trigger behaviour is tested with PGlite in `supabase/tests/`, which stubs `auth.uid()` and the `anon`/`authenticated` roles.
 - Browser code talks to Supabase directly (RLS enforces access). Live updates use Supabase Realtime, not the Hostinger server. Call `getSupabase()` only in effects and handlers, never during render, so the build works without keys.
 - Tests: Vitest (`npm test`). Pure logic is in `src/lib/` (money, consolidate, session-rules).
 

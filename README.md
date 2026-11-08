@@ -3,7 +3,12 @@
 Order together, split fairly. Everyone at the table orders from their own phone. The app combines the order for the waiter, tracks what's been served, and splits the bill, including shared dishes, service charge and tax.
 
 ## Status
-Phase 1 built: sign-in, tables, free-text ordering, the consolidated waiter view and a live delivery checklist. Setup: [docs/SETUP-SUPABASE.md](docs/SETUP-SUPABASE.md). Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Phases 1–3 built:
+- Phase 1: sign-in, tables, free-text ordering, the consolidated waiter view and a live delivery checklist
+- Phase 2: QR and link sharing with quick guest access
+- Phase 3: stores, menus with options, and the admin panel at `/admin`
+
+Setup: [docs/SETUP-SUPABASE.md](docs/SETUP-SUPABASE.md). Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Tech stack
 Next.js 16 (TypeScript, Tailwind) · Supabase (auth, Postgres, realtime, storage) · Claude API · Vitest. Hosted on Hostinger's managed Node.js web app hosting.

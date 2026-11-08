@@ -9,6 +9,8 @@ export interface CurrentUser {
   user: User | null;
   /** True for quick guests (Supabase anonymous sign-in). */
   isGuest: boolean;
+  /** Platform admin (can manage stores and menus). The database enforces this too. */
+  isAdmin: boolean;
   displayName: string;
   loading: boolean;
 }
@@ -18,6 +20,7 @@ export function useUser(): CurrentUser {
   const [state, setState] = useState<CurrentUser>({
     user: null,
     isGuest: false,
+    isAdmin: false,
     displayName: "",
     loading: supabaseConfigured,
   });
@@ -29,11 +32,17 @@ export function useUser(): CurrentUser {
 
     async function load(user: User | null) {
       let displayName = "";
+      let isAdmin = false;
       if (user) {
-        const { data } = await supabase.from("profiles").select("display_name").eq("user_id", user.id).maybeSingle();
+        const { data } = await supabase
+          .from("profiles")
+          .select("display_name, is_platform_admin")
+          .eq("user_id", user.id)
+          .maybeSingle();
         displayName = data?.display_name || user.email?.split("@")[0] || "";
+        isAdmin = Boolean(data?.is_platform_admin);
       }
-      if (!cancelled) setState({ user, isGuest: Boolean(user?.is_anonymous), displayName, loading: false });
+      if (!cancelled) setState({ user, isGuest: Boolean(user?.is_anonymous), isAdmin, displayName, loading: false });
     }
 
     supabase.auth.getUser().then(({ data }) => load(data.user));

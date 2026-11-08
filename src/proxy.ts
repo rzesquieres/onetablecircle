@@ -5,7 +5,7 @@ import { publicOrigin } from "@/lib/site";
 
 // Pages that need a session (a real account or a quick guest).
 // /j/<code> is open: the join page itself offers "join as guest" or sign in.
-const PROTECTED = [/^\/s\//];
+const PROTECTED = [/^\/s\//, /^\/admin(\/|$)/];
 
 export async function proxy(request: NextRequest) {
   if (!supabaseConfigured) return NextResponse.next();

@@ -1,5 +1,5 @@
 import type { ConsolidatedLine } from "@/lib/consolidate";
-import type { Participant } from "@/lib/types";
+import type { Menu, Participant } from "@/lib/types";
 import type { TableData } from "./use-table";
 
 export interface TabProps {
@@ -10,6 +10,8 @@ export interface TabProps {
   now: Date;
   ordersOpen: boolean;
   reload: () => Promise<void>;
+  /** The store's menu, or null for a free-text table (or while loading). */
+  menu: Menu | null;
 }
 
 export function nameOf(data: TableData, participantId: string | null | undefined): string {

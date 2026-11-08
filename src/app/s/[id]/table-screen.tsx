@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { Notice, Spinner } from "@/components/ui";
 import { consolidate, progress } from "@/lib/consolidate";
 import { acceptsOrders } from "@/lib/session-rules";
+import { useMenu } from "@/lib/use-menu";
 import { useTable } from "./use-table";
 import { OrderTab } from "./order-tab";
 import { WaiterTab } from "./waiter-tab";
@@ -17,6 +18,7 @@ type Tab = "order" | "waiter" | "mine" | "people";
 export function TableScreen() {
   const { id } = useParams<{ id: string }>();
   const { data, error, me, isHost, reload } = useTable(id);
+  const { menu } = useMenu(data?.session.store_id ?? null);
   const [tab, setTab] = useState<Tab>("order");
   const [now, setNow] = useState(() => new Date());
 
@@ -45,7 +47,8 @@ export function TableScreen() {
   const open = acceptsOrders(session, now);
   const prog = progress(lines);
   const pct = prog.total ? Math.round((prog.served / prog.total) * 100) : 0;
-  const ctx = { data, me, isHost, lines, now, reload, ordersOpen: open };
+  const ctx = { data, me, isHost, lines, now, reload, ordersOpen: open, menu };
+  const storeLine = menu ? [menu.store.name, menu.store.branch].filter(Boolean).join(" · ") : "";
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
@@ -54,6 +57,7 @@ export function TableScreen() {
           <div className="min-w-0">
             <Link href="/" className="text-sm text-ink-soft">← Tables</Link>
             <h1 className="truncate text-xl font-semibold">{session.title}</h1>
+            {storeLine && storeLine !== session.title && <p className="truncate text-sm text-ink-soft">at {storeLine}</p>}
           </div>
           <StatusBadge open={open} status={session.status} cutoff={session.order_cutoff_at} />
         </div>

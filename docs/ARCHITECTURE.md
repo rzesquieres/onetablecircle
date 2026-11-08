@@ -1,7 +1,12 @@
 # Architecture & data model
 
 Status: **approved 2026-11-08** (Supabase backend; optional tip line; the host confirms payments).
-Phase 1 is implemented in `supabase/migrations/20261108000000_phase1.sql`. Tables for later phases are still a plan and get added in their own migrations.
+Implemented so far, one migration per phase in `supabase/migrations/`:
+- Phase 1: `20261108000000_phase1.sql` (sessions, ordering, delivery checklist)
+- Phase 2: `20261108100000_phase2_guests.sql` (quick guests via anonymous sign-in, table preview, hosts must be real accounts)
+- Phase 3: `20261109000000_phase3_menus.sql` (organizations, stores, menus, option groups, server-side menu pricing `add_menu_item()`, menu photos bucket, admin flag)
+
+Tables for later phases (menu reports, AI import jobs, receipts, bill shares, payments, saved groups, favorites) are still a plan and get added in their own migrations. `menu_reports` moves to Phase 4, alongside AI drafts.
 
 ## 1. Stack
 
@@ -28,6 +33,8 @@ Phone browser ──HTTPS──> Hostinger (Next.js: pages, server actions, AI c
 - **Guests:** "quick guest" uses **Supabase anonymous sign-in**, so every participant has a real `auth.uid()` and one set of security rules covers everyone. A guest can later link email or Google and keep their history.
 - **Joining:** each session has a short random `join_code`. `/j/<code>` and its QR code call a secured database function `join_session(code, name)`. You can't list or guess other sessions.
 - **Price snapshots:** an order item copies its name, unit price and chosen options at order time. Later menu edits don't change past bills.
+- **Menu prices are worked out by the database.** Phones call `add_menu_item(item, chosen options, …)`, and the database computes base price plus option price changes, after enforcing each group's required and maximum choices. Phones can't write `menu_item_id`, `options` or `price_is_estimate` directly. Free-text "Other item" lines keep a phone-entered price, since there's no menu to check them against.
+- **Same-store guarantee:** categories, items, option groups, options and item↔group links all carry `store_id`, with composite foreign keys, so an option from one store can never be attached to another store's item.
 - **Grouping for the waiter:** the app computes a group key from the name, notes and price (plus sorted options from Phase 3), so identical lines group as "3× Iced Latte (Grande, Oat, 50% sugar)". See `src/lib/consolidate.ts`.
 - **Ticking a grouped line:** a ✓ applies to the oldest item in the group that isn't fully served yet. An untick applies to the newest served one. The database keeps the served count between 0 and the quantity.
 - **Delivery audit:** ticks are an append-only log (`delivery_events`, +1 or −1 each, with who and when). The served count is the sum. Unticking is just a −1, and the full history is kept.

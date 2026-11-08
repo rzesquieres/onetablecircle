@@ -1,6 +1,6 @@
 "use client";
 
-import { itemsFor } from "@/lib/consolidate";
+import { itemsFor, optionsText } from "@/lib/consolidate";
 import { Card } from "@/components/ui";
 import type { TabProps } from "./tab-props";
 
@@ -25,6 +25,7 @@ export function MineTab({ data, me }: TabProps) {
                   <p className="font-medium">
                     {item.quantity}× {item.name}
                   </p>
+                  {optionsText(item) && <p className="text-sm">{optionsText(item)}</p>}
                   <p className="text-sm text-ink-soft">
                     {item.notes ? `${item.notes} · ` : ""}
                     {sharedWith > 1 ? `Shared by ${sharedWith}` : "Just you"}

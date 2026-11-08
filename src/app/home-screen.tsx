@@ -18,7 +18,7 @@ const STATUS_LABEL: Record<Session["status"], string> = {
 
 export function HomeScreen() {
   const router = useRouter();
-  const { user, isGuest, displayName, loading } = useUser();
+  const { user, isGuest, isAdmin, displayName, loading } = useUser();
   const [sessions, setSessions] = useState<Session[] | null>(null);
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
@@ -96,9 +96,16 @@ export function HomeScreen() {
         <p>
           Hi, <span className="font-semibold">{displayName}</span>
         </p>
-        {!isGuest && (
-          <button onClick={signOut} className="min-h-11 px-2 text-sm text-ink-soft">Sign out</button>
-        )}
+        <span className="flex items-center gap-1">
+          {isAdmin && (
+            <Link href="/admin" className="inline-flex min-h-11 items-center px-2 text-sm font-medium text-brand">
+              Admin
+            </Link>
+          )}
+          {!isGuest && (
+            <button onClick={signOut} className="min-h-11 px-2 text-sm text-ink-soft">Sign out</button>
+          )}
+        </span>
       </div>
 
       {isGuest ? (

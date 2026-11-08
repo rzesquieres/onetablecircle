@@ -21,6 +21,9 @@ function item(p: Partial<OrderItem> & { id: string }): OrderItem {
     notes: "",
     is_shared: false,
     created_at: `2026-11-08T10:00:${String(seq).padStart(2, "0")}Z`,
+    menu_item_id: null,
+    options: [],
+    price_is_estimate: false,
     ...p,
   };
 }
@@ -51,6 +54,24 @@ describe("groupKey", () => {
     expect(groupKey({ name: "Iced latte", notes: "", unit_price_centavos: null })).not.toBe(
       groupKey({ name: "Iced latte", notes: "", unit_price_centavos: 18000 }),
     );
+  });
+});
+
+describe("groupKey with menu options", () => {
+  const grande = { group: "Size", option: "Grande", price_delta_centavos: 2000 };
+  const oat = { group: "Milk", option: "Oat", price_delta_centavos: 3000 };
+  it("groups the same options in any order, and separates different options", () => {
+    const base = { name: "Latte", notes: "", unit_price_centavos: 21000 };
+    expect(groupKey({ ...base, options: [grande, oat] })).toBe(groupKey({ ...base, options: [oat, grande] }));
+    expect(groupKey({ ...base, options: [grande] })).not.toBe(groupKey({ ...base, options: [oat] }));
+  });
+  it("shows options on the consolidated line", () => {
+    const a = item({ id: "m1", options: [grande, oat], unit_price_centavos: 21000 });
+    const b = item({ id: "m2", options: [oat, grande], unit_price_centavos: 21000, price_is_estimate: true });
+    const [line] = consolidate([a, b], [], []);
+    expect(line.quantity).toBe(2);
+    expect(line.optionsText).toBe("Grande, Oat");
+    expect(line.priceIsEstimate).toBe(true);
   });
 });
 

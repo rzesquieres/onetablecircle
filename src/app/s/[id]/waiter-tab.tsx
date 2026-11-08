@@ -64,6 +64,7 @@ export function WaiterTab({ data, me, lines, reload }: TabProps) {
                     <p className={`text-lg font-semibold leading-snug ${done ? "text-ink-soft line-through" : ""}`}>
                       <span className="tabular-nums">{qtyShown}×</span> {line.name}
                     </p>
+                    {line.optionsText && <p className="text-sm font-medium text-ink">{line.optionsText}</p>}
                     {line.notes && <p className="text-sm text-ink">{line.notes}</p>}
                     <p className="text-xs text-ink-soft">
                       {line.isShared ? "Shared · " : ""}

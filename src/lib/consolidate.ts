@@ -9,9 +9,15 @@ export function normalizeText(s: string): string {
   return s.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
-/** Items with the same key are shown as one line, e.g. "3× Iced latte (oat milk)". */
-export function groupKey(item: Pick<OrderItem, "name" | "notes" | "unit_price_centavos">): string {
-  return [normalizeText(item.name), normalizeText(item.notes), item.unit_price_centavos ?? ""].join("|");
+/** Chosen options as text, in the order they were snapshotted, e.g. "Grande, Oat milk". */
+export function optionsText(item: Pick<OrderItem, "options">): string {
+  return (item.options ?? []).map((o) => o.option).join(", ");
+}
+
+/** Items with the same key are shown as one line, e.g. "3× Iced latte (Grande, Oat milk)". */
+export function groupKey(item: Pick<OrderItem, "name" | "notes" | "unit_price_centavos"> & Partial<Pick<OrderItem, "options">>): string {
+  const opts = (item.options ?? []).map((o) => normalizeText(`${o.group}:${o.option}`)).sort().join(",");
+  return [normalizeText(item.name), opts, normalizeText(item.notes), item.unit_price_centavos ?? ""].join("|");
 }
 
 /** Units served per order item (sum of +1/-1 events, clamped to 0..quantity). */
@@ -28,7 +34,10 @@ export function servedCounts(items: OrderItem[], events: DeliveryEvent[]): Map<s
 export interface ConsolidatedLine {
   key: string;
   name: string;
+  /** Chosen options, e.g. "Grande, Oat milk" ("" for none). */
+  optionsText: string;
   notes: string;
+  priceIsEstimate: boolean;
   unitPriceCentavos: number | null;
   quantity: number;
   served: number;
@@ -64,7 +73,9 @@ export function consolidate(
       line = {
         key,
         name: item.name.trim(),
+        optionsText: optionsText(item),
         notes: item.notes.trim(),
+        priceIsEstimate: Boolean(item.price_is_estimate),
         unitPriceCentavos: item.unit_price_centavos,
         quantity: 0,
         served: 0,
@@ -78,6 +89,7 @@ export function consolidate(
     line.served += served.get(item.id) ?? 0;
     line.items.push(item);
     line.isShared ||= item.is_shared;
+    line.priceIsEstimate ||= Boolean(item.price_is_estimate);
     for (const pid of forItem.get(item.id) ?? []) {
       if (!line.participantIds.includes(pid)) line.participantIds.push(pid);
     }
