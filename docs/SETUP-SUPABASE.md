@@ -101,3 +101,23 @@ Use two phones, or a phone and a laptop, with different accounts.
 - [ ] Host: **Close ordering now**. B can no longer add items, but can still tick. **Reopen ordering** works.
 - [ ] Host: add "Lola" (no phone) and order an item for her.
 - [ ] A third account that hasn't joined can't open the table link `/s/...` directly. It shows "doesn't exist, or you're not part of it".
+
+---
+
+## Invite-only testing (optional, recommended while testing)
+After running `supabase/migrations/20261110200000_invite_only_testers.sql`:
+
+1. Supabase → **Authentication** → **Auth Hooks** (may be under "Hooks") → **Before User Created** → **Add hook / Enable**.
+2. Hook type: **Postgres**, schema `public`, function **`hook_before_user_created`** → **Save**.
+3. Manage who can sign up in the app: **Admin → Testers**. Add emails, or switch invite-only off when you open to everyone.
+
+How it behaves while invite-only is on:
+- Only listed emails (and admins) can create an account (email or Google) and host tables.
+- Anyone can still join a table as a quick guest using the table's link or QR code.
+- People who already had an account were added to the list automatically.
+
+## Open Google sign-in to everyone (publish the Google app)
+While the Google app is in "Testing", only Google accounts listed as test users can use **Continue with Google**. To remove that limit (the app's own tester list above still applies):
+
+1. https://console.cloud.google.com/auth/audience?project=onetablecircle → **Publish app** → **Confirm**.
+2. The app only asks for basic sign-in (email, name, picture), so Google doesn't need to review it. If Google asks for a home page or privacy policy link, tell Claude, which can add simple pages for those.

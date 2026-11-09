@@ -25,6 +25,14 @@ export function NewTableForm() {
   const [error, setError] = useState("");
   const [groups, setGroups] = useState<{ id: string; name: string; count: number }[]>([]);
   const [groupId, setGroupId] = useState<string | null>(null);
+  const [canHost, setCanHost] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (loading || isGuest) return;
+    getSupabase()
+      .rpc("can_host")
+      .then(({ data, error }) => setCanHost(error ? true : Boolean(data))); // on error, let the database decide
+  }, [loading, isGuest]);
 
   useEffect(() => {
     if (loading || isGuest) return;
@@ -98,6 +106,19 @@ export function NewTableForm() {
         >
           Sign in or create account
         </Link>
+        <Link href="/" className="text-center text-sm text-ink-soft">Back</Link>
+      </div>
+    );
+  }
+
+  if (canHost === null) return <Spinner />;
+  if (!canHost) {
+    return (
+      <div className="mt-6 flex flex-col gap-4">
+        <Notice>
+          OneTableCircle is in private testing, so hosting tables is limited to invited testers for now. You can still
+          join any table a friend shares with you.
+        </Notice>
         <Link href="/" className="text-center text-sm text-ink-soft">Back</Link>
       </div>
     );

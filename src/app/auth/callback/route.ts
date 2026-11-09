@@ -13,8 +13,15 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) return NextResponse.redirect(new URL(next, origin));
   }
+  // e.g. sign-up refused by the invite-only hook ("OneTableCircle is in private testing…")
+  const reason = request.nextUrl.searchParams.get("error_description");
   const url = new URL("/login", origin);
-  url.searchParams.set("error", "Sign-in link expired or was opened in a different browser. Please try again.");
+  url.searchParams.set(
+    "error",
+    reason
+      ? reason.replace(/\+/g, " ").slice(0, 200)
+      : "Sign-in link expired or was opened in a different browser. Please try again.",
+  );
   url.searchParams.set("next", next);
   return NextResponse.redirect(url);
 }

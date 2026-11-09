@@ -11,6 +11,7 @@ const MIGRATIONS_DIR = fileURLToPath(new URL("../migrations/", import.meta.url))
 const SUPABASE_STUB = `
   create role anon nologin;
   create role authenticated nologin;
+  create role supabase_auth_admin nologin;
   create schema auth;
   grant usage on schema auth to anon, authenticated;
   grant usage on schema public to anon, authenticated;
@@ -54,6 +55,8 @@ export async function createTestDb(): Promise<PGlite> {
   for (const file of files) {
     await db.exec(readFileSync(MIGRATIONS_DIR + file, "utf8"));
   }
+  // Earlier phases' tests create new users freely; the invite-only tests turn it back on.
+  await db.exec("update public.app_config set invite_only = false");
   return db;
 }
 

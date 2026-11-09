@@ -84,6 +84,7 @@ function StoreList() {
         <h1 className="text-2xl font-semibold">Stores & menus</h1>
         <span className="flex items-center gap-3">
           <Link href="/admin/analytics" className="text-sm font-medium text-brand">Analytics</Link>
+          <Link href="/admin/testers" className="text-sm font-medium text-brand">Testers</Link>
           <Link href="/admin/reports" className="text-sm text-ink-soft">Reports</Link>
           <Link href="/" className="text-sm text-ink-soft">Home</Link>
         </span>
