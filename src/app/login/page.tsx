@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { Spinner } from "@/components/ui";
 import { LoginForm } from "./login-form";
 
@@ -12,6 +13,10 @@ export default function LoginPage() {
       <Suspense fallback={<Spinner />}>
         <LoginForm />
       </Suspense>
+      <p className="mt-auto pt-10 text-center text-xs text-ink-soft">
+        By continuing you agree to how we handle your information in our{" "}
+        <Link href="/privacy" className="underline">Privacy Policy</Link>.
+      </p>
     </main>
   );
 }

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { HomeScreen } from "./home-screen";
 
 export default function Home() {
@@ -6,6 +7,9 @@ export default function Home() {
       <h1 className="text-3xl font-semibold tracking-tight">OneTableCircle</h1>
       <p className="mt-1 text-ink-soft">Order together, split fairly.</p>
       <HomeScreen />
+      <footer className="mt-auto pt-10 text-center text-xs text-ink-soft">
+        <Link href="/privacy" className="underline">Privacy Policy</Link>
+      </footer>
     </main>
   );
 }
