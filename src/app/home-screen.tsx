@@ -40,6 +40,33 @@ async function loadHistory(userId: string): Promise<Map<string, MyShare>> {
   return out;
 }
 
+const HOW_IT_WORKS = [
+  { title: "Start a table", text: "The host picks the restaurant and opens a table." },
+  { title: "Share the code", text: "Friends scan the QR code or tap the link and join with just their name." },
+  { title: "Order and split", text: "Everyone adds their own orders. The app works out each person's share." },
+];
+
+function HowItWorks() {
+  return (
+    <section>
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-soft">How it works</h2>
+      <ol className="flex flex-col gap-3">
+        {HOW_IT_WORKS.map((step, i) => (
+          <li key={step.title} className="flex gap-3">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand font-semibold text-white">
+              {i + 1}
+            </span>
+            <span>
+              <span className="block font-medium">{step.title}</span>
+              <span className="text-sm text-ink-soft">{step.text}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 const STATUS_LABEL: Record<Session["status"], string> = {
   open: "Ordering",
   closed: "Ordering closed",
@@ -114,14 +141,16 @@ export function HomeScreen() {
           <li>• Everyone orders from their own phone</li>
           <li>• One clean list for the waiter</li>
           <li>• Tick items off as they arrive</li>
+          <li>• See exactly what you owe, VAT and service charge included</li>
         </ul>
         <Link href="/login" className="inline-flex min-h-12 items-center justify-center rounded-xl bg-brand px-4 font-semibold text-white">
           Sign in to start
         </Link>
         <div>
-          <p className="mb-2 text-sm text-ink-soft">Got a table code from a friend?</p>
+          <p className="mb-2 text-sm text-ink-soft">Got a table code from a friend? No account needed.</p>
           {joinForm}
         </div>
+        <HowItWorks />
       </div>
     );
   }

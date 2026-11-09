@@ -153,6 +153,13 @@ export function JoinTable() {
               to keep your history.
             </p>
           )}
+          {!user && (
+            <p className="text-center text-xs text-ink-soft">
+              By joining you agree to our{" "}
+              <Link href="/terms" className="underline">Terms of Service</Link> and{" "}
+              <Link href="/privacy" className="underline">Privacy Policy</Link>.
+            </p>
+          )}
         </form>
       )}
     </div>
