@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { ConfirmButton } from "@/components/confirm-button";
 import { Button, Card, Input, Label, Notice, Spinner } from "@/components/ui";
 import { publicStorageUrl } from "@/lib/menu";
 import { resizeImage } from "@/lib/photos";
@@ -155,6 +156,122 @@ export function ProfileForm() {
 
       {error && <Notice tone="error">{error}</Notice>}
       {saved && <Notice>{saved}</Notice>}
+
+      {!isGuest && <SavedGroups />}
     </div>
+  );
+}
+
+interface GroupRow {
+  id: string;
+  name: string;
+  saved_group_members: { id: string; display_name: string; user_id: string | null; sort_order: number }[];
+}
+
+/** Profile: manage saved groups (rename, delete, remove or add people). */
+function SavedGroups() {
+  const [groups, setGroups] = useState<GroupRow[] | null>(null);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    const { data, error } = await getSupabase()
+      .from("saved_groups")
+      .select("id, name, saved_group_members(id, display_name, user_id, sort_order)")
+      .order("name");
+    if (error) setError(friendlyError(error));
+    setGroups((data as GroupRow[]) ?? []);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSupabase()
+      .from("saved_groups")
+      .select("id, name, saved_group_members(id, display_name, user_id, sort_order)")
+      .order("name")
+      .then(({ data }) => {
+        if (!cancelled) setGroups((data as GroupRow[]) ?? []);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function run(action: PromiseLike<{ error: unknown }>) {
+    setError("");
+    const { error } = await action;
+    if (error) setError(friendlyError(error));
+    await load();
+  }
+
+  if (groups === null) return null;
+  return (
+    <section className="flex flex-col gap-3">
+      <div>
+        <h2 className="text-lg font-semibold">Saved groups</h2>
+        <p className="text-sm text-ink-soft">
+          {groups.length
+            ? "Pick one when you start a table to add everyone at once."
+            : "At any table, open the People tab and tap \"Save\" to keep that group of people for next time."}
+        </p>
+      </div>
+      {groups.map((g) => (
+        <GroupCard key={g.id} group={g} run={run} />
+      ))}
+      {error && <Notice tone="error">{error}</Notice>}
+    </section>
+  );
+}
+
+function GroupCard({ group, run }: { group: GroupRow; run: (a: PromiseLike<{ error: unknown }>) => Promise<void> }) {
+  const [name, setName] = useState(group.name);
+  const [newName, setNewName] = useState("");
+  const members = [...group.saved_group_members].sort((a, b) => a.sort_order - b.sort_order);
+  const sb = () => getSupabase();
+  return (
+    <Card className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <Input className="font-semibold" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} />
+        {name.trim() && name !== group.name && (
+          <Button className="min-h-11 px-3 text-sm" onClick={() => run(sb().from("saved_groups").update({ name: name.trim() }).eq("id", group.id))}>
+            Save
+          </Button>
+        )}
+        <ConfirmButton
+          small
+          label="Delete"
+          confirmLabel="Delete group"
+          onConfirm={() => run(sb().from("saved_groups").delete().eq("id", group.id))}
+        />
+      </div>
+      <ul className="flex flex-wrap gap-2">
+        {members.map((m) => (
+          <li key={m.id} className="flex min-h-10 items-center gap-1 rounded-full border border-line pl-3 text-sm">
+            {m.display_name}
+            {!m.user_id && <span className="text-xs text-ink-soft">(name only)</span>}
+            <button
+              className="min-h-10 px-3 text-ink-soft"
+              aria-label={`Remove ${m.display_name}`}
+              onClick={() => run(sb().from("saved_group_members").delete().eq("id", m.id))}
+            >
+              ✕
+            </button>
+          </li>
+        ))}
+      </ul>
+      <form
+        className="flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!newName.trim()) return;
+          void run(
+            sb().from("saved_group_members").insert({ group_id: group.id, display_name: newName.trim(), sort_order: members.length }),
+          );
+          setNewName("");
+        }}
+      >
+        <Input maxLength={40} placeholder="Add someone by name" value={newName} onChange={(e) => setNewName(e.target.value)} />
+        <Button type="submit" variant="secondary">Add</Button>
+      </form>
+    </Card>
   );
 }

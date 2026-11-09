@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Chip, Input, Label, Notice } from "@/components/ui";
 import { defaultSelection, groupsForItem, photoUrl, selectionProblems, toggleOption, unitPrice } from "@/lib/menu";
 import { formatMoney } from "@/lib/money";
@@ -22,7 +22,34 @@ export function MenuPicker({ data, me, reload, menu }: Pick<TabProps, "data" | "
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [openItem, setOpenItem] = useState<MenuItem | null>(null);
+  const [preset, setPreset] = useState<Favorite | null>(null);
+  const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [added, setAdded] = useState("");
+  const storeId = menu.store.id;
+
+  const loadFavorites = useCallback(async () => {
+    const { data: rows } = await getSupabase()
+      .from("favorites")
+      .select("id, menu_item_id, option_ids, notes")
+      .eq("store_id", storeId)
+      .order("created_at");
+    setFavorites((rows as Favorite[]) ?? []);
+  }, [storeId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSupabase()
+      .from("favorites")
+      .select("id, menu_item_id, option_ids, notes")
+      .eq("store_id", storeId)
+      .order("created_at")
+      .then(({ data: rows }) => {
+        if (!cancelled) setFavorites((rows as Favorite[]) ?? []);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [storeId]);
 
   const activeCategory = categoryId ?? categories[0]?.id ?? null;
   const q = search.trim().toLowerCase();
@@ -36,6 +63,15 @@ export function MenuPicker({ data, me, reload, menu }: Pick<TabProps, "data" | "
 
   return (
     <div className="flex flex-col gap-3">
+      <Usuals
+        menu={menu}
+        favorites={favorites}
+        onPick={(item, fav) => {
+          setAdded("");
+          setPreset(fav);
+          setOpenItem(item);
+        }}
+      />
       <Input aria-label="Search the menu" placeholder="Search the menu…" value={search} onChange={(e) => setSearch(e.target.value)} />
       {!q && (
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
@@ -96,14 +132,20 @@ export function MenuPicker({ data, me, reload, menu }: Pick<TabProps, "data" | "
 
       {openItem && (
         <ItemSheet
-          key={openItem.id}
+          key={`${openItem.id}:${preset?.id ?? ""}`}
           item={openItem}
           menu={menu}
           data={data}
           me={me}
-          onClose={() => setOpenItem(null)}
+          preset={preset}
+          onFavoritesChanged={loadFavorites}
+          onClose={() => {
+            setOpenItem(null);
+            setPreset(null);
+          }}
           onAdded={(text) => {
             setOpenItem(null);
+            setPreset(null);
             setAdded(text);
             void reload();
           }}
@@ -113,18 +155,78 @@ export function MenuPicker({ data, me, reload, menu }: Pick<TabProps, "data" | "
   );
 }
 
+interface Favorite {
+  id: string;
+  menu_item_id: string;
+  option_ids: string[];
+  notes: string;
+}
+
+/** "Your usuals" at this store: tap to open the item with your usual options. */
+function Usuals({
+  menu,
+  favorites,
+  onPick,
+}: {
+  menu: Menu;
+  favorites: Favorite[];
+  onPick: (item: MenuItem, fav: Favorite) => void;
+}) {
+  const usable = favorites
+    .map((f) => ({ f, item: menu.items.find((i) => i.id === f.menu_item_id) }))
+    .filter((x): x is { f: Favorite; item: MenuItem } => Boolean(x.item?.is_available));
+  if (!usable.length) return null;
+  return (
+    <div>
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-soft">★ Your usuals</p>
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+        {usable.map(({ f, item }) => {
+          const opts = menu.options.filter((o) => f.option_ids.includes(o.id)).map((o) => o.name);
+          return (
+            <button
+              key={f.id}
+              onClick={() => onPick(item, f)}
+              className="flex min-h-12 shrink-0 flex-col justify-center rounded-2xl border border-brand/40 bg-surface px-3 py-1 text-left active:bg-muted"
+            >
+              <span className="text-sm font-medium">{item.name}</span>
+              {(opts.length > 0 || f.notes) && (
+                <span className="max-w-48 truncate text-xs text-ink-soft">{[...opts, f.notes].filter(Boolean).join(", ")}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ItemSheet({
   item,
   menu,
   data,
   me,
+  preset,
+  onFavoritesChanged,
   onClose,
   onAdded,
-}: Pick<TabProps, "data" | "me"> & { item: MenuItem; menu: Menu; onClose: () => void; onAdded: (text: string) => void }) {
+}: Pick<TabProps, "data" | "me"> & {
+  item: MenuItem;
+  menu: Menu;
+  preset: Favorite | null;
+  onFavoritesChanged: () => void;
+  onClose: () => void;
+  onAdded: (text: string) => void;
+}) {
   const groups = useMemo(() => groupsForItem(menu, item.id), [menu, item.id]);
-  const [selected, setSelected] = useState<string[]>(() => defaultSelection(groups));
+  const [selected, setSelected] = useState<string[]>(() => {
+    if (!preset) return defaultSelection(groups);
+    // Keep only options that still exist on this item.
+    const valid = new Set(groups.flatMap((g) => g.options.map((o) => o.id)));
+    return preset.option_ids.filter((id) => valid.has(id));
+  });
   const [qty, setQty] = useState(1);
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState(preset?.notes ?? "");
+  const [favState, setFavState] = useState<"idle" | "saving" | "saved">(preset ? "saved" : "idle");
   const who = useForWhom(data.participants, me.id);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -230,6 +332,39 @@ function ItemSheet({
               <Input id="sheet-notes" maxLength={200} placeholder="e.g. less ice" value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
             <ForWhom state={who} people={data.participants} meId={me.id} />
+            <div className="flex flex-wrap items-center gap-x-4">
+              {preset ? (
+                <button
+                  type="button"
+                  className="min-h-11 text-sm text-ink-soft underline"
+                  onClick={async () => {
+                    await getSupabase().from("favorites").delete().eq("id", preset.id);
+                    onFavoritesChanged();
+                    onClose();
+                  }}
+                >
+                  Remove from my usuals
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={favState !== "idle" || problems.length > 0}
+                  className="min-h-11 text-sm font-medium text-brand disabled:text-ink-soft"
+                  onClick={async () => {
+                    setFavState("saving");
+                    const { error } = await getSupabase()
+                      .from("favorites")
+                      .insert({ store_id: menu.store.id, menu_item_id: item.id, option_ids: [...selected].sort(), notes: notes.trim() });
+                    // A duplicate means it's already a usual, which is fine.
+                    setFavState(error && !/duplicate/i.test(error.message) ? "idle" : "saved");
+                    if (error && !/duplicate/i.test(error.message)) setError(friendlyError(error));
+                    else onFavoritesChanged();
+                  }}
+                >
+                  {favState === "saved" ? "★ Saved as my usual" : "☆ Save as my usual"}
+                </button>
+              )}
+            </div>
             <ReportProblem storeId={menu.store.id} itemId={item.id} />
           </div>
         </div>

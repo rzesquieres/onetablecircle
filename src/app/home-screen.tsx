@@ -4,10 +4,41 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Card, Input, Notice, Spinner } from "@/components/ui";
+import { formatMoney } from "@/lib/money";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
 import { supabaseConfigured } from "@/lib/supabase/env";
 import { useUser } from "@/lib/use-user";
 import type { Session } from "@/lib/types";
+
+interface MyShare {
+  total: number;
+  paid: boolean;
+  isHost: boolean;
+}
+
+/** Your bill share per table: session id -> share. */
+async function loadHistory(userId: string): Promise<Map<string, MyShare>> {
+  const supabase = getSupabase();
+  const { data: mine } = await supabase.from("participants").select("id, session_id, is_host").eq("user_id", userId);
+  const parts = mine ?? [];
+  if (!parts.length) return new Map();
+  const ids = parts.map((p) => p.id as string);
+  const [{ data: shares }, { data: payments }] = await Promise.all([
+    supabase.from("bill_shares").select("session_id, participant_id, total_centavos").in("participant_id", ids),
+    supabase.from("payments").select("participant_id, confirmed_at, marked_paid_at").in("participant_id", ids),
+  ]);
+  const out = new Map<string, MyShare>();
+  for (const s of shares ?? []) {
+    const part = parts.find((p) => p.id === s.participant_id);
+    const pay = (payments ?? []).find((p) => p.participant_id === s.participant_id);
+    out.set(s.session_id as string, {
+      total: Number(s.total_centavos),
+      paid: Boolean(pay?.confirmed_at || pay?.marked_paid_at),
+      isHost: Boolean(part?.is_host),
+    });
+  }
+  return out;
+}
 
 const STATUS_LABEL: Record<Session["status"], string> = {
   open: "Ordering",
@@ -23,9 +54,12 @@ export function HomeScreen() {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
 
+  const [history, setHistory] = useState<Map<string, MyShare>>(new Map());
+
   useEffect(() => {
     if (!user) return;
-    getSupabase()
+    const supabase = getSupabase();
+    supabase
       .from("sessions")
       .select("*")
       .order("created_at", { ascending: false })
@@ -34,6 +68,8 @@ export function HomeScreen() {
         if (error) setError(friendlyError(error));
         setSessions((data as Session[]) ?? []);
       });
+    // Your share and payment status at each table (history).
+    void loadHistory(user.id).then(setHistory);
   }, [user]);
 
   function join(e: FormEvent) {
@@ -50,6 +86,11 @@ export function HomeScreen() {
     );
   }
   if (loading) return <Spinner />;
+
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  const monthTotal = (sessions ?? [])
+    .filter((s) => s.created_at >= monthStart)
+    .reduce((sum, s) => sum + (history.get(s.id)?.total ?? 0), 0);
 
   const joinForm = (
     <form onSubmit={join} className="flex gap-2">
@@ -127,7 +168,14 @@ export function HomeScreen() {
       {error && <Notice tone="error">{error}</Notice>}
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-soft">Your tables</h2>
+        <div className="mb-2 flex items-baseline justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-soft">Your tables</h2>
+          {monthTotal > 0 && (
+            <span className="text-sm text-ink-soft">
+              This month: <span className="font-semibold text-ink">{formatMoney(monthTotal)}</span>
+            </span>
+          )}
+        </div>
         {sessions === null ? (
           <Spinner />
         ) : sessions.length === 0 ? (
@@ -145,7 +193,24 @@ export function HomeScreen() {
                         {s.host_id === user.id ? " · You're host" : ""}
                       </span>
                     </span>
-                    <span className="text-sm text-ink-soft">{STATUS_LABEL[s.status]}</span>
+                    <span className="shrink-0 text-right text-sm">
+                      {history.get(s.id) ? (
+                        <>
+                          <span className="block font-semibold tabular-nums">{formatMoney(history.get(s.id)!.total)}</span>
+                          <span className="text-xs text-ink-soft">
+                            {history.get(s.id)!.isHost
+                              ? "your share"
+                              : history.get(s.id)!.total === 0
+                                ? "nothing to pay"
+                                : history.get(s.id)!.paid
+                                  ? "paid ✓"
+                                  : "to pay"}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-ink-soft">{STATUS_LABEL[s.status]}</span>
+                      )}
+                    </span>
                   </Card>
                 </Link>
               </li>

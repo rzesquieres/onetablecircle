@@ -8,6 +8,14 @@ Implemented so far, one migration per phase in `supabase/migrations/`:
 - Phase 4: `20261109100000_phase4_ai_import.sql` (`menu_import_jobs`, `apply_menu_import()`, `menu_reports`)
 - Phase 5: `20261110000000_phase5_bill.sql` (receipts, lines, line↔item/people links, `bill_shares`, `payments`, `finalize_bill()` / `reopen_bill()` / `mark_paid()` / `confirm_payment()`, receipt-photo and payment-QR storage)
 
+- Phase 6: `20261110100000_phase6_groups_favorites_stats.sql` (`saved_groups` / `saved_group_members`, `add_saved_group_to_session()`, `favorites`, `admin_stats()`)
+
+### Saved groups, favorites, history, analytics (Phase 6)
+- **Saved groups:** a group is saved from a table's People tab. Members with accounts can only be people you've actually shared a table with (`shared_a_table()`), checked by the database. Picking a group when starting a table calls `add_saved_group_to_session()`: people with accounts are added straight in (the table appears on their phone), and name-only members are added like "someone without a phone".
+- **Favorites ("my usual"):** a menu item plus its chosen option ids and notes, per person, private. Shown as "Your usuals" above the menu. Opening one fills in the sheet, and options that no longer exist are dropped.
+- **History:** the home list shows your frozen `bill_shares` total and payment status per table, plus a this-month total.
+- **Analytics:** `admin_stats()` (admins only) returns counts only: users, active users, tables per week (12 weeks), the top stores over 90 days, AI imports and open reports. The chart uses one validated colour (`--chart`).
+
 ### Bill split (Phase 5)
 - **Receipt:** the host scans it (`POST /api/receipts/scan`: private photo storage, then Claude reads it in `after()` and pre-matches lines to orders using `suggestMatches()`), or types it in.
 - **Who pays for each line:** each line is paid by one of:
@@ -29,7 +37,7 @@ Implemented so far, one migration per phase in `supabase/migrations/`:
 3. The review page `/admin/imports/<id>` checks the job until it is `ready`. The admin ticks, edits and prices items, then calls `apply_menu_import()`, which writes everything in one transaction with `price_status = 'estimated'`. New stores are created as **drafts**.
 4. Users flag wrong items from the item sheet (`menu_reports`). Admins handle them at `/admin/reports`.
 
-Tables for Phase 6 (saved groups, favorites) are still a plan and get their own migration.
+All six planned phases are implemented.
 
 ## 1. Stack
 

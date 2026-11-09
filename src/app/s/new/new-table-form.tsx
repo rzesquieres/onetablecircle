@@ -23,6 +23,25 @@ export function NewTableForm() {
   const [cutoffMinutes, setCutoffMinutes] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [groups, setGroups] = useState<{ id: string; name: string; count: number }[]>([]);
+  const [groupId, setGroupId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (loading || isGuest) return;
+    getSupabase()
+      .from("saved_groups")
+      .select("id, name, saved_group_members(count)")
+      .order("name")
+      .then(({ data }) =>
+        setGroups(
+          (data ?? []).map((g) => ({
+            id: g.id as string,
+            name: g.name as string,
+            count: (g.saved_group_members as unknown as { count: number }[])?.[0]?.count ?? 0,
+          })),
+        ),
+      );
+  }, [loading, isGuest]);
 
   function pickStore(s: StoreHit | null) {
     setStore(s);
@@ -54,6 +73,10 @@ export function NewTableForm() {
         .select("id")
         .single();
       if (error) throw error;
+      if (groupId) {
+        // Not fatal if it fails: the table exists and people can still join by link.
+        await supabase.rpc("add_saved_group_to_session", { p_session_id: data.id, p_group_id: groupId });
+      }
       router.replace(`/s/${data.id}`);
     } catch (err) {
       setError(friendlyError(err));
@@ -83,6 +106,21 @@ export function NewTableForm() {
   return (
     <form onSubmit={submit} className="mt-6 flex flex-col gap-5">
       <StorePicker value={store} onChange={pickStore} />
+
+      {groups.length > 0 && (
+        <div>
+          <Label>Who&apos;s coming? (optional)</Label>
+          <div className="flex flex-wrap gap-2">
+            <Chip selected={groupId === null} onClick={() => setGroupId(null)}>Just share the link</Chip>
+            {groups.map((g) => (
+              <Chip key={g.id} selected={groupId === g.id} onClick={() => setGroupId(g.id)}>
+                {g.name} ({g.count})
+              </Chip>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-ink-soft">A saved group is added to the table straight away; it shows up on their phones.</p>
+        </div>
+      )}
 
       <div>
         <Label htmlFor="title">Table name (optional)</Label>

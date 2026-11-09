@@ -17,7 +17,8 @@ const SUPABASE_STUB = `
   create table auth.users (
     id uuid primary key,
     email text,
-    raw_user_meta_data jsonb not null default '{}'
+    raw_user_meta_data jsonb not null default '{}',
+    is_anonymous boolean not null default false
   );
   create function auth.uid() returns uuid language sql stable as $$
     select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid

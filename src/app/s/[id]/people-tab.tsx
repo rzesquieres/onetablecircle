@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { QrCode } from "@/components/qr-code";
 import { Button, Card, Chip, Input, Label, Notice } from "@/components/ui";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
+import { useUser } from "@/lib/use-user";
 import { timeOf, type TabProps } from "./tab-props";
 
 export function PeopleTab({ data, me, isHost, ordersOpen, reload }: TabProps) {
@@ -85,6 +86,9 @@ export function PeopleTab({ data, me, isHost, ordersOpen, reload }: TabProps) {
             </li>
           ))}
         </ul>
+        <div className="mt-3">
+          <SaveAsGroup data={data} me={me} />
+        </div>
         {isHost && (
           <form onSubmit={addPerson} className="mt-3 flex gap-2">
             <Input placeholder="Add someone without a phone" maxLength={40} value={newPerson} onChange={(e) => setNewPerson(e.target.value)} />
@@ -180,5 +184,51 @@ function DeleteTable({ sessionId, title, people, items }: { sessionId: string; t
         </Card>
       )}
     </section>
+  );
+}
+
+/** Save everyone at this table (except you) as a group, for quick setup next time. */
+function SaveAsGroup({ data, me }: Pick<TabProps, "data" | "me">) {
+  const { isGuest, loading } = useUser();
+  const [name, setName] = useState("");
+  const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
+  const [error, setError] = useState("");
+  const others = data.participants.filter((p) => p.id !== me.id);
+  if (loading || isGuest || others.length === 0) return null;
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    setState("saving");
+    setError("");
+    const supabase = getSupabase();
+    const { data: group, error } = await supabase.from("saved_groups").insert({ name: name.trim() }).select("id").single();
+    if (error || !group) {
+      setError(friendlyError(error));
+      setState("idle");
+      return;
+    }
+    const { error: membersError } = await supabase.from("saved_group_members").insert(
+      others.map((p, i) => ({ group_id: group.id, user_id: p.user_id, display_name: p.display_name, sort_order: i })),
+    );
+    if (membersError) {
+      setError(friendlyError(membersError));
+      setState("idle");
+      return;
+    }
+    setState("saved");
+  }
+
+  if (state === "saved") return <Notice>Saved as &quot;{name.trim()}&quot;. Pick it when you start your next table.</Notice>;
+  return (
+    <Card>
+      <form onSubmit={save} className="flex flex-col gap-2">
+        <p className="text-sm font-medium">Eat together often? Save these {others.length} people as a group.</p>
+        <div className="flex gap-2">
+          <Input required maxLength={40} placeholder="e.g. Family, Office" value={name} onChange={(e) => setName(e.target.value)} />
+          <Button type="submit" variant="secondary" disabled={state === "saving"}>Save</Button>
+        </div>
+        {error && <Notice tone="error">{error}</Notice>}
+      </form>
+    </Card>
   );
 }
