@@ -15,9 +15,4 @@ export function pesoInput(text: string): number | null {
 }
 
 /** centavos -> "180" or "180.50" for an input box. */
-export function pesoText(centavos: number): string {
-  const sign = centavos < 0 ? "-" : "";
-  const abs = Math.abs(centavos);
-  const minor = abs % 100;
-  return `${sign}${Math.floor(abs / 100)}${minor ? `.${String(minor).padStart(2, "0")}` : ""}`;
-}
+export { moneyInputText as pesoText } from "@/lib/money";

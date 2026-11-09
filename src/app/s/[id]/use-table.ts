@@ -2,7 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
-import type { Assignee, DeliveryEvent, OrderItem, Participant, Session } from "@/lib/types";
+import type {
+  Assignee,
+  BillShareRow,
+  DeliveryEvent,
+  OrderItem,
+  Participant,
+  Payment,
+  Receipt,
+  ReceiptLine,
+  ReceiptLineItem,
+  ReceiptLinePerson,
+  Session,
+} from "@/lib/types";
 
 export interface TableData {
   session: Session;
@@ -10,9 +22,31 @@ export interface TableData {
   items: OrderItem[];
   assignees: Assignee[];
   events: DeliveryEvent[];
+  /** The bill (Phase 5): null until the host starts it. */
+  receipt: Receipt | null;
+  lines: ReceiptLine[];
+  lineItems: ReceiptLineItem[];
+  linePeople: ReceiptLinePerson[];
+  shares: BillShareRow[];
+  payments: Payment[];
 }
 
-const TABLES = ["participants", "order_items", "order_item_assignees", "delivery_events"] as const;
+const LIVE_TABLES = [
+  "participants",
+  "order_items",
+  "order_item_assignees",
+  "delivery_events",
+  "receipts",
+  "bill_shares",
+  "payments",
+] as const;
+
+const num = <T extends Record<string, unknown>>(rows: T[] | null, keys: (keyof T)[]): T[] =>
+  (rows ?? []).map((r) => {
+    const copy = { ...r };
+    for (const k of keys) if (copy[k] !== null && copy[k] !== undefined) (copy as Record<keyof T, unknown>)[k] = Number(copy[k]);
+    return copy;
+  });
 
 /**
  * Loads everything for one table and keeps it live: any change by anyone
@@ -26,14 +60,20 @@ export function useTable(sessionId: string) {
 
   const load = useCallback(async () => {
     const supabase = getSupabase();
-    const [s, p, i, a, e] = await Promise.all([
+    const [s, p, i, a, e, r, l, li, lp, sh, pay] = await Promise.all([
       supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle(),
       supabase.from("participants").select("*").eq("session_id", sessionId).order("joined_at"),
       supabase.from("order_items").select("*").eq("session_id", sessionId).order("created_at"),
       supabase.from("order_item_assignees").select("*").eq("session_id", sessionId),
       supabase.from("delivery_events").select("*").eq("session_id", sessionId).order("id"),
+      supabase.from("receipts").select("*").eq("session_id", sessionId).maybeSingle(),
+      supabase.from("receipt_lines").select("*").eq("session_id", sessionId).order("sort_order"),
+      supabase.from("receipt_line_items").select("*").eq("session_id", sessionId),
+      supabase.from("receipt_line_people").select("*").eq("session_id", sessionId),
+      supabase.from("bill_shares").select("*").eq("session_id", sessionId),
+      supabase.from("payments").select("*").eq("session_id", sessionId),
     ]);
-    const firstError = [s, p, i, a, e].find((r) => r.error)?.error;
+    const firstError = [s, p, i, a, e, r, l, li, lp, sh, pay].find((x) => x.error)?.error;
     if (firstError) {
       setError(friendlyError(firstError));
       return;
@@ -43,12 +83,34 @@ export function useTable(sessionId: string) {
       return;
     }
     setError("");
+    const receipt = r.data
+      ? (num([r.data], [
+          "service_charge_centavos",
+          "tax_centavos",
+          "discount_centavos",
+          "tip_centavos",
+          "printed_total_centavos",
+        ])[0] as unknown as Receipt)
+      : null;
     setData({
       session: s.data as Session,
       participants: (p.data ?? []) as Participant[],
-      items: (i.data ?? []) as OrderItem[],
+      items: num(i.data, ["unit_price_centavos"]) as unknown as OrderItem[],
       assignees: (a.data ?? []) as Assignee[],
       events: (e.data ?? []) as DeliveryEvent[],
+      receipt,
+      lines: num(l.data, ["amount_centavos"]) as unknown as ReceiptLine[],
+      lineItems: (li.data ?? []) as ReceiptLineItem[],
+      linePeople: (lp.data ?? []) as ReceiptLinePerson[],
+      shares: num(sh.data, [
+        "items_centavos",
+        "service_centavos",
+        "tax_centavos",
+        "discount_centavos",
+        "tip_centavos",
+        "total_centavos",
+      ]) as unknown as BillShareRow[],
+      payments: (pay.data ?? []) as Payment[],
     });
   }, [sessionId]);
 
@@ -65,7 +127,7 @@ export function useTable(sessionId: string) {
     let channel = supabase
       .channel(`table:${sessionId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "sessions", filter: `id=eq.${sessionId}` }, refresh);
-    for (const table of TABLES) {
+    for (const table of LIVE_TABLES) {
       channel = channel.on(
         "postgres_changes",
         { event: "*", schema: "public", table, filter: `session_id=eq.${sessionId}` },

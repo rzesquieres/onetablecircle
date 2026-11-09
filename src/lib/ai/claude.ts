@@ -1,6 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { AI_MENU_JSON_SCHEMA, AiMenuSchema, type AiMenu } from "./menu-draft";
+import { AI_RECEIPT_JSON_SCHEMA, AiReceiptSchema, type AiReceipt } from "./receipt-draft";
 
 /** Default per the Claude API guide; override with ANTHROPIC_MODEL on Hostinger if you want a cheaper model. */
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
@@ -129,4 +130,35 @@ If you can't find a menu with prices, say so plainly and explain what you found.
   if (!text) throw new Error("The AI couldn't find a menu for this store. Try importing from a link or photos instead.");
   const sources = [...text.matchAll(/^SOURCE:\s*(https?:\/\/\S+)/gim)].map((m) => m[1]);
   return { text, sources };
+}
+
+const RECEIPT_SYSTEM = `You read restaurant and café receipts from the Philippines for a bill-splitting app.
+
+Rules:
+- "lines": one entry per purchased item line, in printed order. "amount" is the line TOTAL (quantity × unit price) as digits only, e.g. "360.00". Include modifiers/add-ons that have their own price as separate lines. Skip lines with no price that only describe the item above.
+- Do NOT put these in "lines": subtotal, service charge, VAT/tax lines, discounts, totals, "amount due", cash tendered, change, card/GCash payment, VATable sales, VAT-exempt sales, zero-rated sales.
+- Philippine menu prices usually already include 12% VAT; the "VAT" or "VATable sales" lines are then only informational. Put tax in "tax_added" ONLY if it is added on top to reach the total. Otherwise null.
+- "service_charge": the service charge amount (often 10%). "discount": the total of all discounts (senior citizen, PWD, promos) as a positive number. "tip": only if a tip/gratuity is printed.
+- "total": the final amount due as printed.
+- Copy numbers exactly; never guess. If something is blurry or cut off, leave it out and say so in "warnings". Mention in "warnings" if the lines plus charges don't add up to the printed total.`;
+
+/** Read a receipt photo (one or more images) into lines and charges. */
+export async function extractReceipt(content: Anthropic.Beta.BetaContentBlockParam[]): Promise<AiReceipt> {
+  const message = await run({
+    max_tokens: 32000,
+    system: RECEIPT_SYSTEM,
+    output_config: { effort: "medium", format: { type: "json_schema", schema: AI_RECEIPT_JSON_SCHEMA } },
+    messages: [{ role: "user", content: [...content, { type: "text", text: "Read this receipt." }] }],
+  });
+  if (message.stop_reason === "refusal") throw new Error("The AI declined to read this receipt. Try another photo.");
+  if (message.stop_reason === "max_tokens") throw new Error("This receipt is too long to read. Try typing it in instead.");
+  let json: unknown;
+  try {
+    json = JSON.parse(textOf(message));
+  } catch {
+    throw new Error("The AI's answer couldn't be read. Please try again.");
+  }
+  const parsed = AiReceiptSchema.safeParse(json);
+  if (!parsed.success) throw new Error("The AI's answer was incomplete. Please try again.");
+  return parsed.data;
 }

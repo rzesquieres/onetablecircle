@@ -82,11 +82,16 @@ export function optionsLabel(options: Pick<OrderOption, "option">[]): string {
   return options.map((o) => o.option).join(", ");
 }
 
-/** Public URL of a menu photo stored at `menu-photos/<path>` in Supabase Storage. */
-export function photoUrl(supabaseUrl: string, path: string | null): string | null {
+/** Public URL of a file in a public Supabase Storage bucket. */
+export function publicStorageUrl(supabaseUrl: string, bucket: string, path: string | null): string | null {
   if (!path) return null;
-  return `${supabaseUrl.replace(/\/+$/, "")}/storage/v1/object/public/menu-photos/${path
+  return `${supabaseUrl.replace(/\/+$/, "")}/storage/v1/object/public/${bucket}/${path
     .split("/")
     .map(encodeURIComponent)
     .join("/")}`;
+}
+
+/** Public URL of a menu photo stored at `menu-photos/<path>`. */
+export function photoUrl(supabaseUrl: string, path: string | null): string | null {
+  return publicStorageUrl(supabaseUrl, "menu-photos", path);
 }

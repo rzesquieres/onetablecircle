@@ -6,6 +6,18 @@ Implemented so far, one migration per phase in `supabase/migrations/`:
 - Phase 2: `20261108100000_phase2_guests.sql` (quick guests via anonymous sign-in, table preview, hosts must be real accounts)
 - Phase 3: `20261109000000_phase3_menus.sql` (organizations, stores, menus, option groups, server-side menu pricing `add_menu_item()`, menu photos bucket, admin flag)
 - Phase 4: `20261109100000_phase4_ai_import.sql` (`menu_import_jobs`, `apply_menu_import()`, `menu_reports`)
+- Phase 5: `20261110000000_phase5_bill.sql` (receipts, lines, line↔item/people links, `bill_shares`, `payments`, `finalize_bill()` / `reopen_bill()` / `mark_paid()` / `confirm_payment()`, receipt-photo and payment-QR storage)
+
+### Bill split (Phase 5)
+- **Receipt:** the host scans it (`POST /api/receipts/scan`: private photo storage, then Claude reads it in `after()` and pre-matches lines to orders using `suggestMatches()`), or types it in.
+- **Who pays for each line:** each line is paid by one of:
+  - **ordered items:** split by quantity across the matched items, then by each item's `share_weight` among the people it's for
+  - **chosen people:** by weight
+  - **everyone:** equally
+- **Charges:** service charge, added tax, tip and discount are spread in proportion to each person's item subtotal (equally if nobody has any).
+- **Rounding:** every split uses the largest-remainder method on integer centavos. Ties go to whoever joined first, so totals always equal the receipt exactly and results are deterministic. See `src/lib/bill.ts` and its tests.
+- **Sending the bill:** the app computes shares and sends them to `finalize_bill()`. The database refuses them unless every line is assigned, each share adds up internally, and each component (items, service, tax, discount, tip) sums exactly to the receipt. It then freezes the shares, copies the host's payment QR onto the receipt, and moves the table to `billing`.
+- **Settling up:** people pay outside the app. `mark_paid()` is "I've paid", by the person or by the host for them. `confirm_payment()` is the host confirming, after which the person can't untick it. The host then marks the table `settled`, or calls `reopen_bill()` to fix the bill, which clears shares and payment marks.
 
 ### AI menu import (Phase 4)
 1. An admin starts a job in one of three ways: **AI add store** (a name), **from a link**, or **from photos/PDFs**. This calls `POST /api/admin/menu-import`. The route checks the session and `can_manage_import()`, inserts a `menu_import_jobs` row, and returns at once.
@@ -17,7 +29,7 @@ Implemented so far, one migration per phase in `supabase/migrations/`:
 3. The review page `/admin/imports/<id>` checks the job until it is `ready`. The admin ticks, edits and prices items, then calls `apply_menu_import()`, which writes everything in one transaction with `price_status = 'estimated'`. New stores are created as **drafts**.
 4. Users flag wrong items from the item sheet (`menu_reports`). Admins handle them at `/admin/reports`.
 
-Tables for later phases (receipts, bill shares, payments, saved groups, favorites) are still a plan and get added in their own migrations.
+Tables for Phase 6 (saved groups, favorites) are still a plan and get their own migration.
 
 ## 1. Stack
 

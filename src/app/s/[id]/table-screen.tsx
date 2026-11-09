@@ -12,8 +12,9 @@ import { OrderTab } from "./order-tab";
 import { WaiterTab } from "./waiter-tab";
 import { MineTab } from "./mine-tab";
 import { PeopleTab } from "./people-tab";
+import { BillTab } from "./bill/bill-tab";
 
-type Tab = "order" | "waiter" | "mine" | "people";
+type Tab = "order" | "waiter" | "mine" | "bill" | "people";
 
 export function TableScreen() {
   const { id } = useParams<{ id: string }>();
@@ -49,6 +50,11 @@ export function TableScreen() {
   const pct = prog.total ? Math.round((prog.served / prog.total) * 100) : 0;
   const ctx = { data, me, isHost, lines, now, reload, ordersOpen: open, menu };
   const storeLine = menu ? [menu.store.name, menu.store.branch].filter(Boolean).join(" · ") : "";
+  // A dot on the Bill tab when you have a bill to pay that you haven't marked paid.
+  const myShare = me ? data.shares.find((s) => s.participant_id === me.id) : undefined;
+  const billWaiting = Boolean(
+    me && !me.is_host && myShare && myShare.total_centavos > 0 && !data.payments.some((p) => p.participant_id === me.id),
+  );
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
@@ -84,16 +90,25 @@ export function TableScreen() {
           <WaiterTab {...ctx} me={me} />
         ) : tab === "mine" ? (
           <MineTab {...ctx} me={me} />
+        ) : tab === "bill" ? (
+          <BillTab {...ctx} me={me} />
         ) : (
           <PeopleTab {...ctx} me={me} />
         )}
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
-        <div className="mx-auto grid max-w-md grid-cols-4">
+        <div className="mx-auto grid max-w-md grid-cols-5">
           <TabButton active={tab === "order"} onClick={() => setTab("order")} label="Order" icon="＋" />
           <TabButton active={tab === "waiter"} onClick={() => setTab("waiter")} label="Waiter" icon="☰" badge={prog.total - prog.served || undefined} />
           <TabButton active={tab === "mine"} onClick={() => setTab("mine")} label="Mine" icon="●" />
+          <TabButton
+            active={tab === "bill"}
+            onClick={() => setTab("bill")}
+            label="Bill"
+            icon="₱"
+            badge={billWaiting ? 1 : undefined}
+          />
           <TabButton active={tab === "people"} onClick={() => setTab("people")} label={isHost ? "Host" : "People"} icon="⚇" />
         </div>
       </nav>
@@ -126,7 +141,7 @@ function TabButton({ active, onClick, label, icon, badge }: { active: boolean; o
       <span aria-hidden className="text-lg leading-none">{icon}</span>
       {label}
       {badge ? (
-        <span className="absolute right-[22%] top-2 min-w-5 rounded-full bg-warn px-1.5 text-[11px] font-bold leading-5 text-white">
+        <span className="absolute right-[18%] top-2 min-w-5 rounded-full bg-warn px-1.5 text-[11px] font-bold leading-5 text-white">
           {badge}
         </span>
       ) : null}

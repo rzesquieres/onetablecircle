@@ -126,6 +126,69 @@ export interface Menu {
   links: ItemGroupLink[];
 }
 
+export type ReceiptStatus = "scanning" | "review" | "failed" | "final";
+export type LineSplit = "items" | "people" | "everyone";
+
+export interface Receipt {
+  id: string;
+  session_id: string;
+  status: ReceiptStatus;
+  image_paths: string[];
+  service_charge_centavos: number;
+  tax_centavos: number;
+  discount_centavos: number;
+  tip_centavos: number;
+  printed_total_centavos: number | null;
+  ai_output: { merchant?: string | null; warnings?: string[] } | null;
+  error: string | null;
+  payment_qr_path: string | null;
+  payment_qr_label: string;
+  finalized_at: string | null;
+}
+
+export interface ReceiptLine {
+  id: string;
+  receipt_id: string;
+  session_id: string;
+  description: string;
+  quantity: number;
+  amount_centavos: number;
+  split: LineSplit;
+  sort_order: number;
+}
+
+export interface ReceiptLineItem {
+  receipt_line_id: string;
+  order_item_id: string;
+  session_id: string;
+}
+
+export interface ReceiptLinePerson {
+  receipt_line_id: string;
+  participant_id: string;
+  session_id: string;
+  weight: number;
+}
+
+export interface BillShareRow {
+  session_id: string;
+  participant_id: string;
+  items_centavos: number;
+  service_centavos: number;
+  tax_centavos: number;
+  discount_centavos: number;
+  tip_centavos: number;
+  total_centavos: number;
+  breakdown: { lineId: string; description: string; amount: number; note: string }[];
+}
+
+export interface Payment {
+  session_id: string;
+  participant_id: string;
+  marked_paid_at: string | null;
+  confirmed_at: string | null;
+}
+
 export interface DeliveryEvent {
   id: number;
   order_item_id: string;

@@ -33,6 +33,14 @@ export function formatMoney(
   return `${sign}${body}.${String(minor).padStart(2, "0")}`;
 }
 
+/** Centavos -> text for an input box: 18000 -> "180", 18050 -> "180.50", -2000 -> "-20". */
+export function moneyInputText(centavos: number): string {
+  assertCentavos(centavos);
+  const abs = Math.abs(centavos);
+  const minor = abs % 100;
+  return `${centavos < 0 ? "-" : ""}${Math.floor(abs / 100)}${minor ? `.${String(minor).padStart(2, "0")}` : ""}`;
+}
+
 /**
  * Parse user-typed money text into centavos without floating-point math.
  * Accepts "1234", "1,234.5", "₱ 1,234.50", "-20". Returns null if invalid

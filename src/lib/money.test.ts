@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMoney, parseMoney } from "./money";
+import { formatMoney, moneyInputText, parseMoney } from "./money";
 
 describe("formatMoney", () => {
   it("formats centavos as pesos", () => {
@@ -14,6 +14,16 @@ describe("formatMoney", () => {
 
   it("rejects non-integer amounts", () => {
     expect(() => formatMoney(12.5)).toThrow(TypeError);
+  });
+});
+
+describe("moneyInputText", () => {
+  it("shows centavos only when needed, and round-trips through parseMoney", () => {
+    expect(moneyInputText(18000)).toBe("180");
+    expect(moneyInputText(18050)).toBe("180.50");
+    expect(moneyInputText(5)).toBe("0.05");
+    expect(moneyInputText(-2000)).toBe("-20");
+    for (const c of [0, 1, 99, 100, 123456, -7]) expect(parseMoney(moneyInputText(c))).toBe(c);
   });
 });
 

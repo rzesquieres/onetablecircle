@@ -102,6 +102,9 @@ export function HomeScreen() {
               Admin
             </Link>
           )}
+          <Link href="/profile" className="inline-flex min-h-11 items-center px-2 text-sm text-ink-soft">
+            Profile
+          </Link>
           {!isGuest && (
             <button onClick={signOut} className="min-h-11 px-2 text-sm text-ink-soft">Sign out</button>
           )}
