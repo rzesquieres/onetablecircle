@@ -1,6 +1,6 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { beforeAll, describe, expect, it } from "vitest";
-import { as, createTestDb } from "./db";
+import { as, asVisitor, createTestDb } from "./db";
 
 const ADMIN = "00000000-0000-0000-0000-00000000e001";
 const OLD_USER = "00000000-0000-0000-0000-00000000e002";
@@ -87,6 +87,10 @@ describe("hosting", () => {
   it("adding someone to the list lets them host", async () => {
     await as(db, ADMIN, () => db.query(`insert into public.beta_testers (email) values ('new@example.com')`));
     await host(NEW_USER);
+  });
+
+  it("signed-out visitors can't call the hosting check", async () => {
+    await expect(asVisitor(db, () => db.query(`select public.can_host()`))).rejects.toThrow(/permission denied/);
   });
 
   it("guests still can't host", async () => {
