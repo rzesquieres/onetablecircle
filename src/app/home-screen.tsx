@@ -74,6 +74,101 @@ const STATUS_LABEL: Record<Session["status"], string> = {
   settled: "Settled",
 };
 
+function shareLabel(share: MyShare): string {
+  if (share.isHost) return "your share";
+  if (share.total === 0) return "nothing to pay";
+  return share.paid ? "paid ✓" : "to pay";
+}
+
+/**
+ * One table in "Your tables". The host also gets a delete button; the first
+ * tap asks for confirmation inline (no browser pop-up), the second deletes the
+ * table for everyone. RLS (sessions_delete) allows only the host, and the
+ * database cascades orders, people and the bill.
+ */
+function TableRow({
+  session: s,
+  share,
+  isHost,
+  onDeleted,
+}: {
+  session: Session;
+  share: MyShare | undefined;
+  isHost: boolean;
+  onDeleted: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function remove() {
+    setBusy(true);
+    setError("");
+    const { data, error } = await getSupabase().from("sessions").delete().eq("id", s.id).select("id");
+    if (error || !data?.length) {
+      setError(error ? friendlyError(error) : "Couldn't delete this table. Only the host can delete it.");
+      setBusy(false);
+      return;
+    }
+    onDeleted();
+  }
+
+  return (
+    <li>
+      <Card className={`flex items-stretch p-0 ${confirming ? "border-danger/40" : ""}`}>
+        <Link href={`/s/${s.id}`} className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-2xl p-4 active:bg-muted">
+          <span className="min-w-0">
+            <span className="block truncate font-medium">{s.title}</span>
+            <span className="text-sm text-ink-soft">
+              {new Date(s.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric" })}
+              {isHost ? " · You're host" : ""}
+            </span>
+          </span>
+          <span className="shrink-0 text-right text-sm">
+            {share ? (
+              <>
+                <span className="block font-semibold tabular-nums">{formatMoney(share.total)}</span>
+                <span className="text-xs text-ink-soft">{shareLabel(share)}</span>
+              </>
+            ) : (
+              <span className="text-ink-soft">{STATUS_LABEL[s.status]}</span>
+            )}
+          </span>
+        </Link>
+        {isHost && !confirming && (
+          <button
+            type="button"
+            aria-label={`Delete ${s.title}`}
+            onClick={() => setConfirming(true)}
+            className="flex w-12 shrink-0 items-center justify-center rounded-r-2xl border-l border-line text-ink-soft active:bg-danger/10 active:text-danger"
+          >
+            <svg aria-hidden viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+            </svg>
+          </button>
+        )}
+      </Card>
+      {confirming && (
+        <div className="mt-2 flex flex-col gap-3 rounded-2xl border border-danger/40 bg-surface p-4">
+          <p className="text-sm">
+            Delete <span className="font-semibold">{s.title}</span> for everyone? Its orders, people and bill are removed
+            too, and it can&apos;t be undone.
+          </p>
+          {error && <Notice tone="error">{error}</Notice>}
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setConfirming(false)} disabled={busy}>
+              Keep it
+            </Button>
+            <Button className="flex-1 bg-danger active:bg-danger" onClick={remove} disabled={busy}>
+              {busy ? "Deleting…" : "Yes, delete"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
 export function HomeScreen() {
   const router = useRouter();
   const { user, isGuest, isAdmin, displayName, loading } = useUser();
@@ -212,37 +307,13 @@ export function HomeScreen() {
         ) : (
           <ul className="flex flex-col gap-2">
             {sessions.map((s) => (
-              <li key={s.id}>
-                <Link href={`/s/${s.id}`}>
-                  <Card className="flex items-center justify-between active:bg-muted">
-                    <span>
-                      <span className="block font-medium">{s.title}</span>
-                      <span className="text-sm text-ink-soft">
-                        {new Date(s.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric" })}
-                        {s.host_id === user.id ? " · You're host" : ""}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-right text-sm">
-                      {history.get(s.id) ? (
-                        <>
-                          <span className="block font-semibold tabular-nums">{formatMoney(history.get(s.id)!.total)}</span>
-                          <span className="text-xs text-ink-soft">
-                            {history.get(s.id)!.isHost
-                              ? "your share"
-                              : history.get(s.id)!.total === 0
-                                ? "nothing to pay"
-                                : history.get(s.id)!.paid
-                                  ? "paid ✓"
-                                  : "to pay"}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-ink-soft">{STATUS_LABEL[s.status]}</span>
-                      )}
-                    </span>
-                  </Card>
-                </Link>
-              </li>
+              <TableRow
+                key={s.id}
+                session={s}
+                share={history.get(s.id)}
+                isHost={s.host_id === user.id}
+                onDeleted={() => setSessions((list) => (list ?? []).filter((x) => x.id !== s.id))}
+              />
             ))}
           </ul>
         )}
