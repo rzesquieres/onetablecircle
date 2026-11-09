@@ -8,6 +8,8 @@ export default function Home() {
       <p className="mt-1 text-ink-soft">Order together, split fairly.</p>
       <HomeScreen />
       <footer className="mt-auto pt-10 text-center text-xs text-ink-soft">
+        <Link href="/pricing" className="underline">Pricing</Link> ·{" "}
+        <Link href="/terms" className="underline">Terms of Service</Link> ·{" "}
         <Link href="/privacy" className="underline">Privacy Policy</Link>
       </footer>
     </main>

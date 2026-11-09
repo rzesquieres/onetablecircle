@@ -14,8 +14,8 @@ export default function LoginPage() {
         <LoginForm />
       </Suspense>
       <p className="mt-auto pt-10 text-center text-xs text-ink-soft">
-        By continuing you agree to how we handle your information in our{" "}
-        <Link href="/privacy" className="underline">Privacy Policy</Link>.
+        By continuing you agree to our <Link href="/terms" className="underline">Terms of Service</Link> and to how we
+        handle your information in our <Link href="/privacy" className="underline">Privacy Policy</Link>.
       </p>
     </main>
   );
