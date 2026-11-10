@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Card, Input, Notice, Spinner } from "@/components/ui";
@@ -9,6 +9,7 @@ import { friendlyError, getSupabase } from "@/lib/supabase/client";
 import { supabaseConfigured } from "@/lib/supabase/env";
 import { useUser } from "@/lib/use-user";
 import type { Session } from "@/lib/types";
+import { Landing } from "./landing";
 
 interface MyShare {
   total: number;
@@ -40,30 +41,14 @@ async function loadHistory(userId: string): Promise<Map<string, MyShare>> {
   return out;
 }
 
-const HOW_IT_WORKS = [
-  { title: "Start a table", text: "The host picks the restaurant and opens a table." },
-  { title: "Share the code", text: "Friends scan the QR code or tap the link and join with just their name." },
-  { title: "Order and split", text: "Everyone adds their own orders. The app works out each person's share." },
-];
-
-function HowItWorks() {
+/** Narrow app column with the title, used for everything except the signed-out landing page. */
+function Shell({ children }: { children: ReactNode }) {
   return (
-    <section>
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-soft">How it works</h2>
-      <ol className="flex flex-col gap-3">
-        {HOW_IT_WORKS.map((step, i) => (
-          <li key={step.title} className="flex gap-3">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand font-semibold text-white">
-              {i + 1}
-            </span>
-            <span>
-              <span className="block font-medium">{step.title}</span>
-              <span className="text-sm text-ink-soft">{step.text}</span>
-            </span>
-          </li>
-        ))}
-      </ol>
-    </section>
+    <div className="mx-auto flex w-full max-w-md flex-col px-4 pt-8">
+      <h1 className="font-display text-3xl font-bold tracking-tight">OneTableCircle</h1>
+      <p className="mt-1 text-ink-soft">Order together, split fairly.</p>
+      {children}
+    </div>
   );
 }
 
@@ -202,12 +187,14 @@ export function HomeScreen() {
 
   if (!supabaseConfigured) {
     return (
-      <div className="mt-8">
-        <Notice tone="warn">Almost ready: the app still needs its Supabase keys. See docs/SETUP-SUPABASE.md.</Notice>
-      </div>
+      <Shell>
+        <div className="mt-8">
+          <Notice tone="warn">Almost ready: the app still needs its Supabase keys. See docs/SETUP-SUPABASE.md.</Notice>
+        </div>
+      </Shell>
     );
   }
-  if (loading) return <Spinner />;
+  if (loading) return <Shell><Spinner /></Shell>;
 
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
   const monthTotal = (sessions ?? [])
@@ -229,26 +216,7 @@ export function HomeScreen() {
     </form>
   );
 
-  if (!user) {
-    return (
-      <div className="mt-8 flex flex-col gap-6">
-        <ul className="flex flex-col gap-2 text-ink-soft">
-          <li>• Everyone orders from their own phone</li>
-          <li>• One clean list for the waiter</li>
-          <li>• Tick items off as they arrive</li>
-          <li>• See exactly what you owe, VAT and service charge included</li>
-        </ul>
-        <Link href="/login" className="inline-flex min-h-12 items-center justify-center rounded-xl bg-brand px-4 font-semibold text-white">
-          Sign in to start
-        </Link>
-        <div>
-          <p className="mb-2 text-sm text-ink-soft">Got a table code from a friend? No account needed.</p>
-          {joinForm}
-        </div>
-        <HowItWorks />
-      </div>
-    );
-  }
+  if (!user) return <Landing joinForm={joinForm} />;
 
   async function signOut() {
     await getSupabase().auth.signOut();
@@ -256,6 +224,7 @@ export function HomeScreen() {
   }
 
   return (
+    <Shell>
     <div className="mt-6 flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <p>
@@ -319,5 +288,6 @@ export function HomeScreen() {
         )}
       </section>
     </div>
+    </Shell>
   );
 }
