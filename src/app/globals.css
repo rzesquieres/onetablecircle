@@ -48,6 +48,7 @@
   --color-chart: var(--chart);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-bricolage), var(--font-geist-sans), system-ui, sans-serif;
 }
 
 body {
@@ -55,4 +56,34 @@ body {
   color: var(--ink);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Landing hero: the shared-dish lines draw in once, then the amounts appear. */
+@keyframes otc-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes otc-pop {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+.otc-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: otc-draw 500ms ease-out forwards;
+}
+.otc-pop {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: otc-pop 300ms ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .otc-draw,
+  .otc-pop {
+    animation: none;
+    opacity: 1;
+    stroke-dashoffset: 0;
+    transform: none;
+  }
 }
