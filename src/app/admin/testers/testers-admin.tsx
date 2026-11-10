@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { ConfirmButton } from "@/components/confirm-button";
+import { QrCode } from "@/components/qr-code";
 import { Button, Card, Input, Label, Notice, Spinner } from "@/components/ui";
 import { parseEmails } from "@/lib/emails";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
@@ -19,6 +20,45 @@ export function TestersAdmin() {
     <AdminGate>
       <Testers />
     </AdminGate>
+  );
+}
+
+/**
+ * QR code that opens the sign-in / sign-up page, to show testers in person so
+ * they don't have to type the address. Uses this site's own address
+ * (NEXT_PUBLIC_SITE_URL, else the current origin), so test copies work too.
+ */
+function SignupQr() {
+  const [copied, setCopied] = useState(false);
+  // Only rendered after the admin check on the client, so `window` is available.
+  const origin =
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || (typeof window === "undefined" ? "" : window.location.origin);
+  const url = origin ? `${origin}/login?mode=signup` : "";
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard blocked: the address is still shown to copy by hand.
+    }
+  }
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <div>
+        <h2 className="font-semibold">Sign-up QR code</h2>
+        <p className="text-sm text-ink-soft">
+          Show this to a tester. Scanning it opens the sign-up page; they still need to use the email you added below.
+        </p>
+      </div>
+      {url ? <QrCode value={url} size={240} label="QR code to the OneTableCircle sign-up page" /> : <Spinner />}
+      <p className="break-all text-center font-mono text-sm">{url}</p>
+      <Button variant="secondary" onClick={copy} disabled={!url}>
+        {copied ? "Link copied ✓" : "Copy link"}
+      </Button>
+    </Card>
   );
 }
 
@@ -123,6 +163,8 @@ function Testers() {
         )}
       </Card>
 
+      <SignupQr />
+
       <Card>
         <form onSubmit={add} className="flex flex-col gap-3">
           <div>
@@ -148,7 +190,7 @@ function Testers() {
           </div>
           <p className="text-xs text-ink-soft">
             They sign up at onetablecircle.com with that email (email + password or Google). The app doesn&apos;t send
-            invitations; tell them yourself.
+            invitations; tell them yourself, or show them the QR code above.
           </p>
         </form>
       </Card>
