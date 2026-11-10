@@ -13,7 +13,8 @@ export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = safeNextPath(params.get("next"));
-  const [mode, setMode] = useState<Mode>("signin");
+  // `?mode=signup` (e.g. from the testers' QR code) opens on "Create an account".
+  const [mode, setMode] = useState<Mode>(params.get("mode") === "signup" ? "signup" : "signin");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
