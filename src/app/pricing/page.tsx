@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { YouTubeChannelLink } from "@/components/youtube-link";
 import { Card } from "@/components/ui";
 import { WaitlistForm } from "./waitlist-form";
 
@@ -77,7 +78,8 @@ export default function PricingPage() {
 
       <footer className="mt-auto pt-6 text-center text-xs text-ink-soft">
         <Link href="/terms" className="underline">Terms of Service</Link> ·{" "}
-        <Link href="/privacy" className="underline">Privacy Policy</Link>
+        <Link href="/privacy" className="underline">Privacy Policy</Link> ·{" "}
+        <YouTubeChannelLink />
       </footer>
     </main>
   );
