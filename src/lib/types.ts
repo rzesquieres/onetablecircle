@@ -23,6 +23,8 @@ export interface Participant {
   display_name: string;
   is_host: boolean;
   joined_at: string;
+  /** Who added this person by name (people without a phone); null for people who joined themselves. */
+  added_by: string | null;
 }
 
 export interface OrderItem {

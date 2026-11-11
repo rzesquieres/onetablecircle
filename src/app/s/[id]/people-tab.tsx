@@ -37,12 +37,38 @@ export function PeopleTab({ data, me, isHost, ordersOpen, reload }: TabProps) {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  const active = session.status === "open" || session.status === "closed";
+  // Anyone can add someone without a phone while ordering is open; the host until billing starts.
+  const canAddPeople = ordersOpen || (isHost && active);
+
   function addPerson(e: FormEvent) {
     e.preventDefault();
     const name = newPerson.trim();
     if (!name) return;
     setNewPerson("");
-    void run(getSupabase().from("participants").insert({ session_id: session.id, display_name: name }));
+    void run(getSupabase().rpc("add_offline_person", { p_session_id: session.id, p_display_name: name }));
+  }
+
+  /** People without a phone, with nothing ordered for them, can be removed by the host or whoever added them. */
+  function canRemove(p: (typeof participants)[number]) {
+    if (p.is_host || p.user_id || data.assignees.some((a) => a.participant_id === p.id)) return false;
+    return (isHost && active) || (p.added_by === me.id && ordersOpen);
+  }
+
+  async function removePerson(id: string) {
+    setError("");
+    const { data: rows, error } = await getSupabase().from("participants").delete().eq("id", id).select("id");
+    if (error) setError(friendlyError(error));
+    else if (!rows?.length) setError("Couldn't remove them. Something may have been ordered for them.");
+    void reload();
+  }
+
+  function addedLabel(p: (typeof participants)[number]) {
+    if (p.is_host) return "Host";
+    if (p.user_id) return `joined ${timeOf(p.joined_at)}`;
+    const adder = participants.find((x) => x.id === p.added_by);
+    if (!adder || adder.is_host) return "added by host";
+    return adder.id === me.id ? "added by you" : `added by ${adder.display_name}`;
   }
 
   const updateSession = (patch: Record<string, unknown>) =>
@@ -80,8 +106,18 @@ export function PeopleTab({ data, me, isHost, ordersOpen, reload }: TabProps) {
                 {p.display_name}
                 {p.id === me.id && <span className="text-ink-soft"> (you)</span>}
               </span>
-              <span className="text-xs text-ink-soft">
-                {p.is_host ? "Host" : p.user_id ? `joined ${timeOf(p.joined_at)}` : "added by host"}
+              <span className="flex items-center gap-1 text-xs text-ink-soft">
+                {addedLabel(p)}
+                {canRemove(p) && (
+                  <Button
+                    variant="danger"
+                    className="min-h-11 px-3 text-sm"
+                    aria-label={`Remove ${p.display_name}`}
+                    onClick={() => void removePerson(p.id)}
+                  >
+                    Remove
+                  </Button>
+                )}
               </span>
             </li>
           ))}
@@ -89,9 +125,15 @@ export function PeopleTab({ data, me, isHost, ordersOpen, reload }: TabProps) {
         <div className="mt-3">
           <SaveAsGroup data={data} me={me} />
         </div>
-        {isHost && (
+        {canAddPeople && (
           <form onSubmit={addPerson} className="mt-3 flex gap-2">
-            <Input placeholder="Add someone without a phone" maxLength={40} value={newPerson} onChange={(e) => setNewPerson(e.target.value)} />
+            <Input
+              aria-label="Name of someone without a phone"
+              placeholder="Add someone without a phone"
+              maxLength={40}
+              value={newPerson}
+              onChange={(e) => setNewPerson(e.target.value)}
+            />
             <Button type="submit" variant="secondary">Add</Button>
           </form>
         )}
