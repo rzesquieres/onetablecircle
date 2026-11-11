@@ -36,3 +36,6 @@ desktop.ini
 
 # Raw screen captures for marketing videos (large, may contain personal data)
 /video-assets/
+
+# Private documents for outside parties (not part of the app)
+/docs/OneTableCircle-description-for-law-firm.docx
