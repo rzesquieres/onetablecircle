@@ -33,3 +33,6 @@ desktop.ini
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Raw screen captures for marketing videos (large, may contain personal data)
+/video-assets/
