@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { YouTubeEmbed } from "@/components/youtube-embed";
 import { allocate } from "@/lib/bill";
+import { INTRO_VIDEO } from "@/lib/youtube";
 import { formatMoney } from "@/lib/money";
 
 /*
@@ -226,6 +228,9 @@ export function Landing({ joinForm }: { joinForm: ReactNode }) {
               </li>
             ))}
           </ol>
+          <div className="mx-auto mt-10 max-w-3xl md:mt-12">
+            <YouTubeEmbed videoId={INTRO_VIDEO.id} title={INTRO_VIDEO.title} />
+          </div>
         </div>
       </section>
 
