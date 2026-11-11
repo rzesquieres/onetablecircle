@@ -331,7 +331,7 @@ function ItemSheet({
               <Label htmlFor="sheet-notes">Notes (optional)</Label>
               <Input id="sheet-notes" maxLength={200} placeholder="e.g. less ice" value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
-            <ForWhom state={who} people={data.participants} meId={me.id} />
+            <ForWhom state={who} people={data.participants} meId={me.id} sessionId={data.session.id} />
             <div className="flex flex-wrap items-center gap-x-4">
               {preset ? (
                 <button

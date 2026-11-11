@@ -66,7 +66,7 @@ export function FreeTextForm({ data, me, reload, compact }: Pick<TabProps, "data
         <Label htmlFor="notes">Notes (optional)</Label>
         <Input id="notes" maxLength={200} placeholder="e.g. less ice" value={notes} onChange={(e) => setNotes(e.target.value)} />
       </div>
-      <ForWhom state={who} people={data.participants} meId={me.id} />
+      <ForWhom state={who} people={data.participants} meId={me.id} sessionId={data.session.id} onPersonAdded={reload} />
       {error && <Notice tone="error">{error}</Notice>}
       {added && <Notice>{added} ✓</Notice>}
       <Button type="submit" disabled={busy} className="min-h-14 text-lg">
