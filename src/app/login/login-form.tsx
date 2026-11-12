@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button, Input, Label, Notice } from "@/components/ui";
+import { isEmailNotConfirmed, isEmailRateLimited, RESEND_COOLDOWN_SECONDS } from "@/lib/auth-errors";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
 import { googleSignInEnabled, supabaseConfigured } from "@/lib/supabase/env";
 import { safeNextPath } from "@/lib/site";
@@ -20,7 +21,8 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(params.get("error") ?? "");
-  const [info, setInfo] = useState("");
+  // Set when the email still needs confirming: after sign-up, or a sign-in before confirming.
+  const [pending, setPending] = useState<{ email: string; reason: "signup" | "signin" } | null>(null);
 
   if (!supabaseConfigured) {
     return (
@@ -49,11 +51,14 @@ export function LoginForm() {
     e.preventDefault();
     setBusy(true);
     setError("");
-    setInfo("");
     const supabase = getSupabase();
     try {
       if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error && isEmailNotConfirmed(error)) {
+          setPending({ email: email.trim(), reason: "signin" });
+          return;
+        }
         if (error) throw error;
         router.replace(next);
         router.refresh();
@@ -68,14 +73,33 @@ export function LoginForm() {
           router.replace(next);
           router.refresh();
         } else {
-          setInfo("Check your email for a confirmation link, then come back here.");
+          setPending({ email: email.trim(), reason: "signup" });
         }
       }
     } catch (err) {
-      setError(friendlyError(err));
+      setError(
+        isEmailRateLimited(err)
+          ? "We've sent a lot of emails just now. Please wait a few minutes and try again."
+          : friendlyError(err),
+      );
     } finally {
       setBusy(false);
     }
+  }
+
+  if (pending) {
+    return (
+      <CheckEmail
+        email={pending.email}
+        reason={pending.reason}
+        redirectTo={callbackUrl()}
+        onBack={() => {
+          setPending(null);
+          setMode("signin");
+          setPassword("");
+        }}
+      />
+    );
   }
 
   return (
@@ -116,7 +140,6 @@ export function LoginForm() {
           />
         </div>
         {error && <Notice tone="error">{error}</Notice>}
-        {info && <Notice>{info}</Notice>}
         <Button type="submit" disabled={busy}>
           {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
         </Button>
@@ -128,10 +151,72 @@ export function LoginForm() {
         onClick={() => {
           setMode(mode === "signin" ? "signup" : "signin");
           setError("");
-          setInfo("");
-        }}
+              }}
       >
         {mode === "signin" ? "New here? Create an account" : "Already have an account? Sign in"}
+      </button>
+    </div>
+  );
+}
+
+/** "Check your email" screen with a Resend button (cooldown so it can't be spammed). */
+function CheckEmail({
+  email,
+  reason,
+  redirectTo,
+  onBack,
+}: {
+  email: string;
+  reason: "signup" | "signin";
+  redirectTo: string;
+  onBack: () => void;
+}) {
+  // Sign-up just sent an email, so start on cooldown; a sign-in attempt may not have.
+  const [wait, setWait] = useState(reason === "signup" ? RESEND_COOLDOWN_SECONDS : 0);
+  const [sending, setSending] = useState(false);
+  const [message, setMessage] = useState<{ tone: "error" | "info"; text: string } | null>(null);
+
+  useEffect(() => {
+    if (wait <= 0) return;
+    const t = setTimeout(() => setWait((w) => w - 1), 1000);
+    return () => clearTimeout(t);
+  }, [wait]);
+
+  async function resend() {
+    setSending(true);
+    setMessage(null);
+    const { error } = await getSupabase().auth.resend({ type: "signup", email, options: { emailRedirectTo: redirectTo } });
+    setSending(false);
+    if (error) {
+      setMessage({
+        tone: "error",
+        text: isEmailRateLimited(error)
+          ? "Please wait a minute before asking for another email."
+          : friendlyError(error),
+      });
+      if (isEmailRateLimited(error)) setWait(RESEND_COOLDOWN_SECONDS);
+      return;
+    }
+    setMessage({ tone: "info", text: "Sent. It can take a minute to arrive." });
+    setWait(RESEND_COOLDOWN_SECONDS);
+  }
+
+  return (
+    <div className="mt-6 flex flex-col gap-4">
+      <h2 className="text-xl font-semibold">{reason === "signup" ? "Check your email" : "Please confirm your email first"}</h2>
+      <p>
+        We sent a confirmation link to <span className="font-semibold break-all">{email}</span>. Tap it to finish
+        {reason === "signup" ? " creating your account" : " signing in"}.
+      </p>
+      <p className="text-sm text-ink-soft">
+        Can&apos;t find it? Check your spam or promotions folder. The link opens OneTableCircle and signs you in.
+      </p>
+      {message && <Notice tone={message.tone}>{message.text}</Notice>}
+      <Button variant="secondary" onClick={resend} disabled={sending || wait > 0}>
+        {sending ? "Sending…" : wait > 0 ? `Resend email (${wait}s)` : "Resend email"}
+      </Button>
+      <button type="button" className="min-h-11 text-sm font-medium text-brand" onClick={onBack}>
+        Wrong email? Go back
       </button>
     </div>
   );
