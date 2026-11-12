@@ -11,6 +11,7 @@ export function HostBillStart({ data, lines, reload }: TabProps) {
   const receipt = data.receipt;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [limitReached, setLimitReached] = useState(false);
   const unserved = lines.filter((l) => l.served < l.quantity);
   const scanning = receipt?.status === "scanning";
 
@@ -35,6 +36,11 @@ export function HostBillStart({ data, lines, reload }: TabProps) {
       }
       const res = await fetch("/api/receipts/scan", { method: "POST", body: form });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (res.status === 429) {
+        setLimitReached(true);
+        setError(body.error || "You've reached today's receipt-scan limit. You can type the receipt in instead.");
+        return;
+      }
       if (!res.ok) throw new Error(body.error || `Scan failed (error ${res.status}).`);
       await reload();
     } catch (err) {
@@ -90,7 +96,7 @@ export function HostBillStart({ data, lines, reload }: TabProps) {
           bottom.
         </p>
         <label
-          className={`inline-flex min-h-14 cursor-pointer items-center justify-center rounded-xl bg-brand px-4 text-lg font-semibold text-white ${busy ? "opacity-50" : "active:bg-brand-strong"}`}
+          className={`inline-flex min-h-14 items-center justify-center rounded-xl bg-brand px-4 text-lg font-semibold text-white ${busy || limitReached ? "opacity-50" : "cursor-pointer active:bg-brand-strong"}`}
         >
           {busy ? "Uploading…" : "📷 Scan receipt"}
           <input
@@ -98,7 +104,7 @@ export function HostBillStart({ data, lines, reload }: TabProps) {
             accept="image/*"
             capture="environment"
             multiple
-            disabled={busy}
+            disabled={busy || limitReached}
             className="sr-only"
             onChange={(e) => {
               void scan(e.target.files);
@@ -109,7 +115,7 @@ export function HostBillStart({ data, lines, reload }: TabProps) {
         <Button variant="secondary" disabled={busy} onClick={typeItIn}>
           Type the receipt in instead
         </Button>
-        {error && <Notice tone="error">{error}</Notice>}
+        {error && <Notice tone={limitReached ? "warn" : "error"}>{error}</Notice>}
       </Card>
 
       <p className="text-xs text-ink-soft">
