@@ -19,7 +19,19 @@ const SUPABASE_STUB = `
     id uuid primary key,
     email text,
     raw_user_meta_data jsonb not null default '{}',
-    is_anonymous boolean not null default false
+    is_anonymous boolean not null default false,
+    created_at timestamptz not null default now(),
+    last_sign_in_at timestamptz,
+    banned_until timestamptz
+  );
+  create table auth.sessions (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references auth.users (id) on delete cascade
+  );
+  create table auth.refresh_tokens (
+    id bigint generated always as identity primary key,
+    user_id varchar(255),
+    session_id uuid references auth.sessions (id) on delete cascade
   );
   create function auth.uid() returns uuid language sql stable as $$
     select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
