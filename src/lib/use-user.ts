@@ -34,11 +34,15 @@ export function useUser(): CurrentUser {
       let displayName = "";
       let isAdmin = false;
       if (user) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("display_name, is_platform_admin")
-          .eq("user_id", user.id)
-          .maybeSingle();
+        // "*" rather than a column list, so this keeps working if removed_at
+        // isn't in the database yet.
+        const { data } = await supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle();
+        if (data?.removed_at) {
+          // An admin removed this account (OTC-16): end the login on this device too.
+          await supabase.auth.signOut({ scope: "local" });
+          if (!cancelled) setState({ user: null, isGuest: false, isAdmin: false, displayName: "", loading: false });
+          return;
+        }
         displayName = data?.display_name || user.email?.split("@")[0] || "";
         isAdmin = Boolean(data?.is_platform_admin);
       }
