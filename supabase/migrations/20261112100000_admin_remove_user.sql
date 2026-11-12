@@ -9,14 +9,21 @@
 -- What happens:
 --   * the profile is marked removed and renamed "Removed user"; their name at
 --     every table (and in other people's saved groups) becomes "Removed user";
---   * they lose admin rights and their testers-list entry;
+--   * they lose admin rights;
 --   * their Supabase Auth account is banned and all its sessions are deleted,
 --     so they can't sign in again or refresh a login (an access token already
 --     issued stays valid until it expires, at most about an hour; the app
 --     signs them out as soon as it sees the removed profile, and they can't
 --     host new tables);
 --   * a row is written to user_removals (who, by whom, when, optional reason).
--- Because the account still exists, the same email can't sign up again.
+--
+-- The admin chooses whether the same email may sign up again:
+--   * not allowed (default): the account keeps its email, so a new sign-up
+--     with it fails; it is also taken off the testers list;
+--   * allowed: the account's email is swapped for a placeholder and its
+--     sign-in methods (password, Google) are unlinked, so the person can sign
+--     up again as a brand-new account with no link to the old history. Their
+--     testers-list entry is kept, so this works while invite-only is on.
 
 alter table public.profiles add column removed_at timestamptz;
 
@@ -26,6 +33,7 @@ create table public.user_removals (
   email text,
   display_name text not null default '',
   reason text not null default '' check (char_length(reason) <= 200),
+  allow_signup boolean not null default false,
   removed_by uuid references auth.users (id) on delete set null,
   removed_at timestamptz not null default now()
 );
@@ -78,7 +86,11 @@ begin
   return query
   select
     u.id,
-    u.email::text,
+    -- A removed account that freed its email shows the email it had.
+    coalesce(
+      (select r.email from public.user_removals r where r.user_id = u.id order by r.removed_at desc limit 1),
+      u.email
+    )::text,
     coalesce(p.display_name, ''),
     coalesce(p.is_platform_admin, false),
     u.created_at,
@@ -102,7 +114,11 @@ begin
 end $$;
 
 -- Remove (soft delete) an account. Admins only; checked here, on the server.
-create function public.admin_remove_user(p_user_id uuid, p_reason text default '') returns void
+create function public.admin_remove_user(
+  p_user_id uuid,
+  p_reason text default '',
+  p_allow_signup boolean default false
+) returns void
 language plpgsql security definer set search_path = '' as $$
 declare
   v_admin uuid := (select auth.uid());
@@ -145,7 +161,7 @@ begin
    where user_id = p_user_id;
   update public.participants set display_name = 'Removed user' where user_id = p_user_id;
   update public.saved_group_members set display_name = 'Removed user' where user_id = p_user_id;
-  if v_email is not null then
+  if v_email is not null and not coalesce(p_allow_signup, false) then
     delete from public.beta_testers where email = lower(trim(v_email));
   end if;
 
@@ -155,11 +171,22 @@ begin
   delete from auth.refresh_tokens where user_id = p_user_id::text;
   delete from auth.sessions where user_id = p_user_id;
 
-  insert into public.user_removals (user_id, email, display_name, reason, removed_by)
-  values (p_user_id, v_email, v_name, trim(coalesce(p_reason, '')), v_admin);
+  if coalesce(p_allow_signup, false) then
+    -- Free the email and unlink sign-in methods, so signing up again (with a
+    -- password or the same Google account) creates a new account instead of
+    -- landing on this banned one.
+    update auth.users
+       set email = 'removed-' || p_user_id::text || '@removed.invalid',
+           raw_user_meta_data = '{}'::jsonb
+     where id = p_user_id;
+    delete from auth.identities where user_id = p_user_id;
+  end if;
+
+  insert into public.user_removals (user_id, email, display_name, reason, allow_signup, removed_by)
+  values (p_user_id, v_email, v_name, trim(coalesce(p_reason, '')), coalesce(p_allow_signup, false), v_admin);
 end $$;
 
 revoke execute on function public.admin_list_users() from public, anon;
-revoke execute on function public.admin_remove_user(uuid, text) from public, anon;
+revoke execute on function public.admin_remove_user(uuid, text, boolean) from public, anon;
 grant execute on function public.admin_list_users() to authenticated;
-grant execute on function public.admin_remove_user(uuid, text) to authenticated;
+grant execute on function public.admin_remove_user(uuid, text, boolean) to authenticated;

@@ -28,6 +28,13 @@ const SUPABASE_STUB = `
     id uuid primary key default gen_random_uuid(),
     user_id uuid not null references auth.users (id) on delete cascade
   );
+  create table auth.identities (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references auth.users (id) on delete cascade,
+    provider text not null,
+    provider_id text not null,
+    identity_data jsonb not null default '{}'
+  );
   create table auth.refresh_tokens (
     id bigint generated always as identity primary key,
     user_id varchar(255),

@@ -24,8 +24,12 @@ interface Row {
 
 const listUsers = (who: string) =>
   as(db, who, async () => (await db.query<Row>(`select * from public.admin_list_users()`)).rows);
-const remove = (who: string, target: string, reason = "") =>
-  as(db, who, () => db.query(`select public.admin_remove_user($1, $2)`, [target, reason]));
+const remove = (who: string, target: string, reason = "", allowSignup?: boolean) =>
+  as(db, who, () =>
+    allowSignup === undefined
+      ? db.query(`select public.admin_remove_user($1, $2)`, [target, reason])
+      : db.query(`select public.admin_remove_user($1, $2, $3)`, [target, reason, allowSignup]),
+  );
 
 beforeAll(async () => {
   db = await createTestDb();
@@ -40,7 +44,11 @@ beforeAll(async () => {
     [ADMIN, ADMIN2, HOST, DINER, OTHER, GUEST],
   );
   await db.query(`update public.profiles set is_platform_admin = true where user_id = $1`, [ADMIN]);
-  await db.query(`insert into public.beta_testers (email) values ('diner@example.com')`);
+  await db.query(`insert into public.beta_testers (email) values ('diner@example.com'), ('other@example.com')`);
+  await db.query(
+    `insert into auth.identities (user_id, provider, provider_id) values ($1::uuid, 'email', $1::text), ($2, 'google', 'g-123')`,
+    [DINER, OTHER],
+  );
 
   // Hosty hosts a table that Dina joins; the bill is sent and Dina hasn't paid.
   const s = await db.query<{ id: string }>(
@@ -162,6 +170,36 @@ describe("admin_remove_user", () => {
     await expect(
       as(db, OTHER, () => db.query(`update public.profiles set removed_at = now() where user_id = $1`, [OTHER])),
     ).rejects.toThrow(/permission denied/);
+  });
+
+  it("by default keeps the email taken and the sign-in methods linked", async () => {
+    const u = await db.query<{ email: string }>(`select email from auth.users where id = $1`, [DINER]);
+    expect(u.rows[0].email).toBe("diner@example.com");
+    expect((await db.query(`select 1 from auth.identities where user_id = $1`, [DINER])).rows).toHaveLength(1);
+  });
+
+  it("can free the email so the person can sign up again as a new account", async () => {
+    await remove(ADMIN, OTHER, "", true);
+
+    const u = await db.query<{ email: string; banned_until: Date }>(
+      `select email, banned_until from auth.users where id = $1`,
+      [OTHER],
+    );
+    expect(u.rows[0].email).toBe(`removed-${OTHER}@removed.invalid`);
+    expect(u.rows[0].banned_until.getUTCFullYear()).toBe(2999);
+    // Google sign-in unlinked, so the same Google account makes a new user.
+    expect((await db.query(`select 1 from auth.identities where user_id = $1`, [OTHER])).rows).toHaveLength(0);
+    // Still on the testers list, so sign-up works while invite-only is on.
+    expect((await db.query(`select 1 from public.beta_testers where email = 'other@example.com'`)).rows).toHaveLength(1);
+
+    const log = await db.query<{ email: string; allow_signup: boolean }>(
+      `select email, allow_signup from public.user_removals where user_id = $1`,
+      [OTHER],
+    );
+    expect(log.rows).toEqual([{ email: "other@example.com", allow_signup: true }]);
+    // The admin list still shows the email they had.
+    const row = (await listUsers(ADMIN)).find((r) => r.user_id === OTHER)!;
+    expect(row.email).toBe("other@example.com");
   });
 
   it("shows removed users last in the admin list", async () => {

@@ -25,6 +25,7 @@ interface Removal {
   email: string | null;
   display_name: string;
   reason: string;
+  allow_signup: boolean;
   removed_at: string;
 }
 
@@ -45,7 +46,7 @@ async function fetchAll() {
     supabase.rpc("admin_list_users"),
     supabase
       .from("user_removals")
-      .select("id, email, display_name, reason, removed_at")
+      .select("id, email, display_name, reason, allow_signup, removed_at")
       .order("removed_at", { ascending: false })
       .limit(20),
   ]);
@@ -174,6 +175,7 @@ function Users() {
                 </span>
                 <span className="text-xs text-ink-soft">
                   {new Date(r.removed_at).toLocaleString("en-PH")}
+                  {r.allow_signup ? " · can sign up again" : " · email blocked"}
                   {r.reason ? ` · ${r.reason}` : ""}
                 </span>
               </li>
@@ -195,6 +197,7 @@ function RemoveConfirm({
   onDone: (message: string) => void | Promise<void>;
 }) {
   const [reason, setReason] = useState("");
+  const [allowSignup, setAllowSignup] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const name = user.display_name || user.email || "this user";
@@ -213,7 +216,11 @@ function RemoveConfirm({
   async function remove() {
     setBusy(true);
     setError("");
-    const { error } = await getSupabase().rpc("admin_remove_user", { p_user_id: user.user_id, p_reason: reason.trim() });
+    const { error } = await getSupabase().rpc("admin_remove_user", {
+      p_user_id: user.user_id,
+      p_reason: reason.trim(),
+      p_allow_signup: allowSignup,
+    });
     setBusy(false);
     if (error) return setError(friendlyError(error));
     await onDone(`Removed ${name}${user.email && user.email !== name ? ` (${user.email})` : ""}.`);
@@ -225,8 +232,8 @@ function RemoveConfirm({
         Remove {user.display_name || "(no name)"} <span className="break-all font-normal">({user.email})</span>?
       </p>
       <p className="text-sm text-ink-soft">
-        They&apos;ll be signed out and can&apos;t sign in or sign up again with this email. Past tables and bills stay
-        the same for everyone else, with their name shown as &quot;Removed user&quot;.
+        They&apos;ll be signed out and can&apos;t sign in to this account again. Past tables and bills stay the same for
+        everyone else, with their name shown as &quot;Removed user&quot;.
       </p>
       {warnings.map((w) => (
         <Notice key={w} tone="warn">{w}</Notice>
@@ -241,6 +248,22 @@ function RemoveConfirm({
           onChange={(e) => setReason(e.target.value)}
         />
       </div>
+      <label className="flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={allowSignup}
+          onChange={(e) => setAllowSignup(e.target.checked)}
+        />
+        <span>
+          <span className="block font-medium">Let this email sign up again</span>
+          <span className="text-ink-soft">
+            {allowSignup
+              ? "They can create a new account with this email (or the same Google account). It starts empty, with no link to this account's history."
+              : "Leave off for abuse or spam: this email stays blocked and is taken off the testers list."}
+          </span>
+        </span>
+      </label>
       {error && <Notice tone="error">{error}</Notice>}
       <div className="flex flex-wrap gap-2">
         <Button variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
