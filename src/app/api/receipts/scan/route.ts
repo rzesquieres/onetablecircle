@@ -48,6 +48,15 @@ export async function POST(request: NextRequest) {
   const { data: existing } = await supabase.from("receipts").select("id, status").eq("session_id", sessionId).maybeSingle();
   if (existing?.status === "final") return fail(409, "The bill was already sent. Take it back first to rescan.");
 
+  // Daily scan limit (each scan is a paid AI call). Checked and recorded in one
+  // step, before any photo is saved or sent to the AI. Admins aren't limited.
+  const { error: limitError } = await supabase.rpc("claim_receipt_scan", { p_session_id: sessionId });
+  if (limitError) {
+    if (limitError.code === "OT429") return fail(429, limitError.message);
+    console.error("[receipt-scan] limit check failed", limitError.message);
+    return fail(503, "Couldn't start scanning right now. Try again, or type the receipt in instead.");
+  }
+
   // Keep the photos (private: only people at this table can see them).
   const paths: string[] = [];
   for (const f of files) {
