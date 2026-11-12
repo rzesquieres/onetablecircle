@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { ConfirmButton } from "@/components/confirm-button";
 import { Button, Card, Input, Label, Notice, Spinner } from "@/components/ui";
+import { feedbackHref } from "@/lib/feedback";
 import { publicStorageUrl } from "@/lib/menu";
 import { resizeImage } from "@/lib/photos";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
@@ -158,6 +159,16 @@ export function ProfileForm() {
       {saved && <Notice>{saved}</Notice>}
 
       {!isGuest && <SavedGroups />}
+
+      <Link href={feedbackHref("/profile")}>
+        <Card className="flex items-center justify-between gap-3 py-3 active:bg-muted">
+          <span>
+            <span className="block font-medium">Send feedback</span>
+            <span className="text-sm text-ink-soft">Found a problem or have an idea? Tell us.</span>
+          </span>
+          <span aria-hidden className="text-ink-soft">→</span>
+        </Card>
+      </Link>
     </div>
   );
 }

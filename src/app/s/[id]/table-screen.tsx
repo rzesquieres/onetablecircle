@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Notice, Spinner } from "@/components/ui";
 import { consolidate, progress } from "@/lib/consolidate";
+import { feedbackHref } from "@/lib/feedback";
 import { acceptsOrders } from "@/lib/session-rules";
 import { useMenu } from "@/lib/use-menu";
 import { useTable } from "./use-table";
@@ -61,7 +62,10 @@ export function TableScreen() {
       <header className="sticky top-0 z-10 border-b border-line bg-background/95 px-4 pb-3 pt-4 backdrop-blur">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <Link href="/" className="text-sm text-ink-soft">← Tables</Link>
+            <span className="flex items-center gap-3 text-sm text-ink-soft">
+              <Link href="/">← Tables</Link>
+              <Link href={feedbackHref(`/s/${session.id}`, session.id)} className="underline">Feedback</Link>
+            </span>
             <h1 className="truncate text-xl font-semibold">{session.title}</h1>
             {storeLine && storeLine !== session.title && <p className="truncate text-sm text-ink-soft">at {storeLine}</p>}
           </div>
