@@ -27,6 +27,8 @@ interface Removal {
   reason: string;
   allow_signup: boolean;
   removed_at: string;
+  restored_at: string | null;
+  restore_reason: string;
 }
 
 export function UsersAdmin() {
@@ -46,7 +48,7 @@ async function fetchAll() {
     supabase.rpc("admin_list_users"),
     supabase
       .from("user_removals")
-      .select("id, email, display_name, reason, allow_signup, removed_at")
+      .select("id, email, display_name, reason, allow_signup, removed_at, restored_at, restore_reason")
       .order("removed_at", { ascending: false })
       .limit(20),
   ]);
@@ -60,8 +62,10 @@ function Users() {
   const [filter, setFilter] = useState("");
   const [showRemoved, setShowRemoved] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [warning, setWarning] = useState("");
 
   const apply = useCallback((r: Awaited<ReturnType<typeof fetchAll>>) => {
     if (r.error) setError(friendlyError(r.error));
@@ -97,6 +101,7 @@ function Users() {
 
       {error && <Notice tone="error">{error}</Notice>}
       {message && <Notice>{message}</Notice>}
+      {warning && <Notice tone="warn">{warning}</Notice>}
 
       <section className="flex flex-col gap-2">
         <Input aria-label="Search users" placeholder="Search name or email…" value={filter} onChange={(e) => setFilter(e.target.value)} />
@@ -139,11 +144,28 @@ function Users() {
                       className="min-h-9 px-2 text-sm"
                       onClick={() => {
                         setConfirming(u.user_id);
+                        setRestoring(null);
                         setMessage("");
+                        setWarning("");
                         setError("");
                       }}
                     >
                       Remove user
+                    </Button>
+                  )}
+                  {u.removed_at && restoring !== u.user_id && (
+                    <Button
+                      variant="secondary"
+                      className="min-h-9 px-2 text-sm"
+                      onClick={() => {
+                        setRestoring(u.user_id);
+                        setConfirming(null);
+                        setMessage("");
+                        setWarning("");
+                        setError("");
+                      }}
+                    >
+                      Restore user
                     </Button>
                   )}
                 </div>
@@ -154,6 +176,18 @@ function Users() {
                     onDone={async (msg) => {
                       setConfirming(null);
                       setMessage(msg);
+                      apply(await fetchAll());
+                    }}
+                  />
+                )}
+                {restoring === u.user_id && (
+                  <RestoreConfirm
+                    userId={u.user_id}
+                    onCancel={() => setRestoring(null)}
+                    onDone={async (msg, warn) => {
+                      setRestoring(null);
+                      setMessage(msg);
+                      setWarning(warn ?? "");
                       apply(await fetchAll());
                     }}
                   />
@@ -178,6 +212,12 @@ function Users() {
                   {r.allow_signup ? " · can sign up again" : " · email blocked"}
                   {r.reason ? ` · ${r.reason}` : ""}
                 </span>
+                {r.restored_at && (
+                  <span className="block text-xs font-medium text-brand">
+                    Restored {new Date(r.restored_at).toLocaleString("en-PH")}
+                    {r.restore_reason ? ` · ${r.restore_reason}` : ""}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
@@ -270,6 +310,145 @@ function RemoveConfirm({
         <Button className="bg-danger active:bg-danger" onClick={remove} disabled={busy}>
           {busy ? "Removing…" : "Remove user"}
         </Button>
+      </div>
+    </Card>
+  );
+}
+
+interface PendingRemoval {
+  email: string | null;
+  display_name: string;
+  allow_signup: boolean;
+  was_tester: boolean | null;
+}
+
+function RestoreConfirm({
+  userId,
+  onCancel,
+  onDone,
+}: {
+  userId: string;
+  onCancel: () => void;
+  onDone: (message: string, warning?: string) => void | Promise<void>;
+}) {
+  const [removal, setRemoval] = useState<PendingRemoval | null | undefined>(undefined);
+  const [reason, setReason] = useState("");
+  const [addToTesters, setAddToTesters] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    getSupabase()
+      .from("user_removals")
+      .select("email, display_name, allow_signup, was_tester")
+      .eq("user_id", userId)
+      .is("restored_at", null)
+      .order("removed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) setError(friendlyError(error));
+        const r = (data as PendingRemoval | null) ?? null;
+        setRemoval(r);
+        // Removals from before OTC-18 don't know; default to adding them back.
+        if (r) setAddToTesters(r.was_tester ?? true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  if (removal === undefined) return <Spinner />;
+  const name = removal?.display_name || "(no name)";
+
+  async function restore() {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/users/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, reason: reason.trim(), addToTesters }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        email?: string | null;
+        emailSent?: boolean;
+        emailError?: string;
+      };
+      if (!res.ok) return setError(body.error ?? "Couldn't restore this user.");
+      const who = `${name}${body.email ? ` (${body.email})` : ""}`;
+      await onDone(
+        `Restored ${who}.${body.emailSent ? " We emailed them that they can sign in again." : ""}`,
+        body.emailSent ? undefined : `The email to let them know wasn't sent: ${body.emailError ?? "unknown error"}`,
+      );
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="flex flex-col gap-3 border-brand/40">
+      {removal === null ? (
+        <Notice tone="error">No removal record was found for this user, so they can&apos;t be restored here.</Notice>
+      ) : (
+        <>
+          <p className="font-semibold">
+            Restore {name} <span className="break-all font-normal">({removal.email ?? "no email"})</span>?
+          </p>
+          <p className="text-sm text-ink-soft">
+            They&apos;ll be able to sign in to their account again, and their name comes back at their tables and in
+            saved groups. Admin rights are not restored. We&apos;ll email them that their account is back.
+          </p>
+          {removal.allow_signup && (
+            <Notice tone="warn">
+              This account was removed with &quot;Let this email sign up again&quot;. Their email is put back only if
+              nobody has signed up with it since. They may need to use &quot;Forgot password&quot; (or Continue with
+              Google) to get back in.
+            </Notice>
+          )}
+          <div>
+            <Label htmlFor={`restore-reason-${userId}`}>Reason (optional, only admins see it)</Label>
+            <Input
+              id={`restore-reason-${userId}`}
+              maxLength={200}
+              placeholder="e.g. Removed by mistake"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </div>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={addToTesters}
+              onChange={(e) => setAddToTesters(e.target.checked)}
+            />
+            <span>
+              <span className="block font-medium">Add them to the testers list</span>
+              <span className="text-ink-soft">
+                {removal.was_tester === true
+                  ? "They were a tester before they were removed."
+                  : removal.was_tester === false
+                    ? "They weren't a tester before they were removed."
+                    : "Needed to host tables while sign-ups are invite-only."}
+              </span>
+            </span>
+          </label>
+        </>
+      )}
+      {error && <Notice tone="error">{error}</Notice>}
+      <div className="flex flex-wrap gap-2">
+        <Button variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
+        {removal && (
+          <Button onClick={restore} disabled={busy}>
+            {busy ? "Restoring…" : "Restore user"}
+          </Button>
+        )}
       </div>
     </Card>
   );

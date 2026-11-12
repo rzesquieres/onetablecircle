@@ -8,14 +8,19 @@ import { friendlyError, getSupabase } from "@/lib/supabase/client";
 import { googleSignInEnabled, supabaseConfigured } from "@/lib/supabase/env";
 import { safeNextPath } from "@/lib/site";
 
-type Mode = "signin" | "signup";
+type Mode = "signin" | "signup" | "forgot";
 
 export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = safeNextPath(params.get("next"));
-  // `?mode=signup` (e.g. from the testers' QR code) opens on "Create an account".
-  const [mode, setMode] = useState<Mode>(params.get("mode") === "signup" ? "signup" : "signin");
+  // `?mode=signup` (e.g. from the testers' QR code) opens on "Create an account";
+  // `?mode=forgot` (e.g. from the "account restored" email) opens on "Forgot password".
+  const initialMode = params.get("mode");
+  const [mode, setMode] = useState<Mode>(
+    initialMode === "signup" ? "signup" : initialMode === "forgot" ? "forgot" : "signin",
+  );
+  const [resetSent, setResetSent] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -53,6 +58,14 @@ export function LoginForm() {
     setError("");
     const supabase = getSupabase();
     try {
+      if (mode === "forgot") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent("/reset-password")}`,
+        });
+        if (error) throw error;
+        setResetSent(email.trim());
+        return;
+      }
       if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error && isEmailNotConfirmed(error)) {
@@ -102,6 +115,46 @@ export function LoginForm() {
     );
   }
 
+  if (mode === "forgot") {
+    return (
+      <div className="mt-6 flex flex-col gap-4">
+        <h2 className="text-xl font-semibold">Forgot password</h2>
+        {resetSent ? (
+          <>
+            <p>
+              If <span className="font-semibold break-all">{resetSent}</span> has an account, we sent it a link to set a
+              new password. It can take a minute to arrive; check your spam folder too.
+            </p>
+            {googleSignInEnabled && (
+              <p className="text-sm text-ink-soft">Used Google before? You can also go back and choose Continue with Google.</p>
+            )}
+          </>
+        ) : (
+          <form onSubmit={submit} className="flex flex-col gap-4">
+            <p className="text-sm text-ink-soft">Type your email and we&apos;ll send you a link to set a new password.</p>
+            <div>
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" autoComplete="email" inputMode="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+            </div>
+            {error && <Notice tone="error">{error}</Notice>}
+            <Button type="submit" disabled={busy}>{busy ? "Sending…" : "Send reset link"}</Button>
+          </form>
+        )}
+        <button
+          type="button"
+          className="min-h-11 text-sm font-medium text-brand"
+          onClick={() => {
+            setMode("signin");
+            setResetSent("");
+            setError("");
+          }}
+        >
+          Back to sign in
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-6 flex flex-col gap-5">
       {googleSignInEnabled && (
@@ -138,6 +191,18 @@ export function LoginForm() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+          {mode === "signin" && (
+            <button
+              type="button"
+              className="mt-1 text-sm text-ink-soft underline"
+              onClick={() => {
+                setMode("forgot");
+                setError("");
+              }}
+            >
+              Forgot password?
+            </button>
+          )}
         </div>
         {error && <Notice tone="error">{error}</Notice>}
         <Button type="submit" disabled={busy}>

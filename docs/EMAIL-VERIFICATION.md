@@ -43,6 +43,34 @@ browser or inside the Gmail app):
 <p style="color:#666;font-size:13px">If you didn't sign up for OneTableCircle, you can ignore this email.</p>
 ```
 
+## 3b. Reset password email template
+
+Used by "Forgot password" on the sign-in page (and linked from the "account restored" email).
+Authentication → **Emails** → **Templates** → **Reset Password**.
+
+Subject: `Set a new OneTableCircle password`
+
+```html
+<h2>Set a new password</h2>
+<p>Tap the button to choose a new password for OneTableCircle.</p>
+<p>
+  <a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery"
+     style="display:inline-block;padding:12px 20px;background:#0f766e;color:#fff;border-radius:10px;text-decoration:none;font-weight:600">
+    Set a new password
+  </a>
+</p>
+<p style="color:#666;font-size:13px">If you didn't ask for this, you can ignore this email. Your password stays the same.</p>
+```
+
+## 3c. App emails (account restored)
+
+When an admin restores a removed user (Admin → Users → Restore user), the app emails them itself,
+not through Supabase. Use the same sender service as above:
+
+1. In Resend (or Brevo), create an API key that can send email.
+2. In Hostinger → Environment variables, add `RESEND_API_KEY` (or `BREVO_API_KEY`). Optional: `EMAIL_FROM`.
+3. Until a key is set, restores still work, but the admin sees "The email to let them know wasn't sent".
+
 ## 4. URL configuration
 
 Authentication → **URL Configuration**:

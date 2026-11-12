@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { publicOrigin, safeNextPath } from "@/lib/site";
 
-// Google sign-in and email confirmation links land here with ?code=...
+// Google sign-in, email confirmation and password-reset links land here with ?code=...
 export async function GET(request: NextRequest) {
   const origin = publicOrigin(request);
   const code = request.nextUrl.searchParams.get("code");
@@ -18,10 +18,10 @@ export async function GET(request: NextRequest) {
   // Unlike ?code=, these work even if the link opens in a different browser or the mail app.
   const tokenHash = request.nextUrl.searchParams.get("token_hash");
   const type = request.nextUrl.searchParams.get("type");
-  if (tokenHash && (type === "signup" || type === "email")) {
+  if (tokenHash && (type === "signup" || type === "email" || type === "recovery")) {
     const supabase = await createServerSupabase();
     const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
-    if (!error) return NextResponse.redirect(new URL(next, origin));
+    if (!error) return NextResponse.redirect(new URL(type === "recovery" ? "/reset-password" : next, origin));
   }
   // e.g. sign-up refused by the invite-only hook ("OneTableCircle is in private testing…")
   const reason = request.nextUrl.searchParams.get("error_description");

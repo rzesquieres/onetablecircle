@@ -33,7 +33,12 @@ const SUPABASE_STUB = `
     user_id uuid not null references auth.users (id) on delete cascade,
     provider text not null,
     provider_id text not null,
-    identity_data jsonb not null default '{}'
+    identity_data jsonb not null default '{}',
+    email text generated always as (lower(identity_data->>'email')) stored,
+    last_sign_in_at timestamptz,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    unique (provider_id, provider)
   );
   create table auth.refresh_tokens (
     id bigint generated always as identity primary key,
