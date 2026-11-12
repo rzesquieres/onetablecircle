@@ -9,6 +9,7 @@ import { friendlyError, getSupabase } from "@/lib/supabase/client";
 import { SUPABASE_URL } from "@/lib/supabase/env";
 import type { BillShareRow } from "@/lib/types";
 import { nameOf, type TabProps } from "../tab-props";
+import { RatingPrompt } from "./rating-prompt";
 
 export function BillSummary({ data, me, isHost, reload }: TabProps) {
   const receipt = data.receipt!;
@@ -58,6 +59,8 @@ export function BillSummary({ data, me, isHost, reload }: TabProps) {
           />
         </Card>
       )}
+
+      <RatingPrompt sessionId={data.session.id} />
 
       <section className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between">

@@ -65,7 +65,7 @@ export default function PrivacyPage() {
             <strong>Problem reports.</strong> If you report a wrong menu item or price, we store your report.
           </li>
           <li>
-            <strong>Feedback.</strong> If you send feedback, we store your message, your name, the page you sent it from,
+            <strong>Feedback and ratings.</strong> If you send feedback or rate a table after the meal, we store your message or rating, your name, the page you sent it from,
             the table you were at (if any), your browser type, and your email if you asked us to reply.
           </li>
           <li>
