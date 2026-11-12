@@ -9,7 +9,7 @@ export const metadata = {
 };
 
 // Edit these lists to change what each plan shows. Nothing here locks features
-// in the app yet: everything is free while OneTableCircle is in testing.
+// in the app yet: everything is free during the open beta.
 const FREE_FEATURES = [
   "Start a table and invite friends by QR code or link",
   "Friends join as guests with just their name",
@@ -71,7 +71,7 @@ export default function PricingPage() {
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Join the Circle Plus waitlist</h2>
         <p className="text-sm text-ink-soft">
-          Everything is free while we&apos;re testing. Leave your email and we&apos;ll tell you when Plus launches.
+          Everything is free during the open beta. Leave your email and we&apos;ll tell you when Plus launches.
         </p>
         <WaitlistForm />
       </section>

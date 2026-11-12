@@ -6,7 +6,7 @@ export const metadata = {
   description: "The rules for using OneTableCircle.",
 };
 
-const UPDATED = "November 11, 2026";
+const UPDATED = "November 12, 2026";
 const CONTACT = "admin@onetablecircle.com";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -60,7 +60,7 @@ export default function TermsPage() {
         <ul className="list-disc space-y-2 pl-5">
           <li>Give accurate information and keep your sign-in details to yourself. You are responsible for activity on your account.</li>
           <li>Guests can join a table with just a name. A guest&apos;s tables are kept on that device only.</li>
-          <li>While the app is in testing, hosting tables may be limited to invited people.</li>
+          <li>OneTableCircle is in open beta, so features may change as we improve it.</li>
         </ul>
       </Section>
 
@@ -85,7 +85,7 @@ export default function TermsPage() {
 
       <Section title="Paid plans">
         <p>
-          OneTableCircle is free while it is in testing. If we introduce a paid plan such as Circle Plus, we will show the
+          OneTableCircle is free during the open beta. If we introduce a paid plan such as Circle Plus, we will show the
           price, what it includes, and how billing and cancellation work before you can buy it. Joining the waitlist
           doesn&apos;t commit you to paying.
         </p>
