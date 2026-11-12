@@ -7,6 +7,7 @@ export default function Home() {
     <main className="flex w-full flex-1 flex-col">
       <HomeScreen />
       <footer className="mx-auto mt-auto w-full max-w-5xl px-4 pt-10 pb-8 text-center text-xs text-ink-soft md:px-8">
+        <Link href="/feedback" className="underline">Send feedback</Link> ·{" "}
         <Link href="/pricing" className="underline">Pricing</Link> ·{" "}
         <Link href="/terms" className="underline">Terms of Service</Link> ·{" "}
         <Link href="/privacy" className="underline">Privacy Policy</Link> ·{" "}

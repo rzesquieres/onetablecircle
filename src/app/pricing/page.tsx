@@ -77,6 +77,7 @@ export default function PricingPage() {
       </section>
 
       <footer className="mt-auto pt-6 text-center text-xs text-ink-soft">
+        <Link href="/feedback?from=%2Fpricing" className="underline">Send feedback</Link> ·{" "}
         <Link href="/terms" className="underline">Terms of Service</Link> ·{" "}
         <Link href="/privacy" className="underline">Privacy Policy</Link> ·{" "}
         <YouTubeChannelLink />

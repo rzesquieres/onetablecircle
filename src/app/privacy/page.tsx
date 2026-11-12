@@ -6,7 +6,7 @@ export const metadata = {
   description: "How OneTableCircle collects, uses and protects your information.",
 };
 
-const UPDATED = "November 9, 2026";
+const UPDATED = "November 13, 2026";
 const CONTACT = "admin@onetablecircle.com";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -65,6 +65,10 @@ export default function PrivacyPage() {
             <strong>Problem reports.</strong> If you report a wrong menu item or price, we store your report.
           </li>
           <li>
+            <strong>Feedback.</strong> If you send feedback, we store your message, your name, the page you sent it from,
+            the table you were at (if any), your browser type, and your email if you asked us to reply.
+          </li>
+          <li>
             <strong>Technical information.</strong> Our hosting and database providers keep standard server logs (such as
             IP address, browser type and time of request) for security and troubleshooting.
           </li>
@@ -92,7 +96,7 @@ export default function PrivacyPage() {
             the bill and who has paid. People who are not at that table cannot see it.
           </li>
           <li>
-            <strong>Our administrators</strong> can manage stores and menus, review problem reports, and see overall counts.
+            <strong>Our administrators</strong> can manage stores and menus, review problem reports and feedback, and see overall counts.
           </li>
           <li>
             <strong>Service providers</strong> who process data on our behalf, only to run the app:

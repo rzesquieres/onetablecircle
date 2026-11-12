@@ -29,6 +29,26 @@ function OpenReportsLink() {
   );
 }
 
+/** "2 new feedback" banner, shown only when there is some. */
+function NewFeedbackLink() {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    getSupabase()
+      .from("feedback")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "new")
+      .then(({ count }) => setCount(count ?? 0));
+  }, []);
+  if (!count) return null;
+  return (
+    <Link href="/admin/feedback">
+      <Notice>
+        {count} new feedback from users. Read it →
+      </Notice>
+    </Link>
+  );
+}
+
 export function AdminHome() {
   return (
     <AdminGate>
@@ -86,12 +106,14 @@ function StoreList() {
           <Link href="/admin/analytics" className="text-sm font-medium text-brand">Analytics</Link>
           <Link href="/admin/testers" className="text-sm font-medium text-brand">Testers</Link>
           <Link href="/admin/users" className="text-sm font-medium text-brand">Users</Link>
+          <Link href="/admin/feedback" className="text-sm font-medium text-brand">Feedback</Link>
           <Link href="/admin/reports" className="text-sm text-ink-soft">Reports</Link>
           <Link href="/" className="text-sm text-ink-soft">Home</Link>
         </span>
       </div>
 
       <OpenReportsLink />
+      <NewFeedbackLink />
       <AiAddStoreCard />
       <RecentImports />
 
