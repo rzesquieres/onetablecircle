@@ -31,7 +31,7 @@ interface FeedbackRow {
   status: FeedbackStatus;
 }
 
-type CategoryFilter = "all" | FeedbackCategory;
+type CategoryFilter = "all" | FeedbackCategory | "rating";
 
 const STATUS_TABS: { value: FeedbackStatus; label: string }[] = [
   { value: "new", label: "New" },
@@ -47,7 +47,8 @@ const CATEGORY_STYLE: Record<FeedbackCategory, string> = {
 
 async function fetchFeedback(status: FeedbackStatus, category: CategoryFilter) {
   let q = getSupabase().from("feedback").select("*").eq("status", status);
-  if (category !== "all") q = q.eq("category", category);
+  if (category === "rating") q = q.eq("kind", "post_meal");
+  else if (category !== "all") q = q.eq("category", category);
   const { data, error } = await q.order("created_at", { ascending: false }).limit(200);
   return { data: (data as FeedbackRow[]) ?? [], error };
 }
@@ -97,10 +98,12 @@ function Inbox() {
         <Link href="/admin" className="text-sm text-ink-soft">← Admin</Link>
         <h1 className="text-2xl font-semibold">Feedback</h1>
         <p className="text-sm text-ink-soft">
-          What people sent from the Send feedback page. Mark items read once you&apos;ve seen them, and done once
-          they&apos;re handled.
+          What people sent from the Send feedback page, and their ratings after a meal. Mark items read once
+          you&apos;ve seen them, and done once they&apos;re handled. Ratings without a comment go straight to Read.
         </p>
       </div>
+
+      <RatingSummary />
 
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap gap-2">
@@ -111,14 +114,14 @@ function Inbox() {
           ))}
         </div>
         <div className="flex flex-wrap gap-2">
-          {(["all", "bug", "idea", "other"] as CategoryFilter[]).map((c) => (
+          {(["all", "bug", "idea", "other", "rating"] as CategoryFilter[]).map((c) => (
             <Chip
               key={c}
               selected={category === c}
               className="min-h-9 px-3 text-xs"
               onClick={() => { setRows(null); setCategory(c); }}
             >
-              {c === "all" ? "All types" : FEEDBACK_CATEGORY_TEXT[c]}
+              {c === "all" ? "All types" : c === "rating" ? "Post-meal ratings" : FEEDBACK_CATEGORY_TEXT[c]}
             </Chip>
           ))}
         </div>
@@ -142,6 +145,55 @@ function Inbox() {
   );
 }
 
+interface RatingStat {
+  label: string;
+  count: number;
+  average: number | null;
+}
+
+/** Average post-meal rating over the last 7 and 30 days. */
+function RatingSummary() {
+  const [stats, setStats] = useState<RatingStat[] | null>(null);
+  useEffect(() => {
+    const since30 = new Date(Date.now() - 30 * 86_400_000);
+    const since7 = Date.now() - 7 * 86_400_000;
+    getSupabase()
+      .from("feedback")
+      .select("rating, created_at")
+      .eq("kind", "post_meal")
+      .gte("created_at", since30.toISOString())
+      .limit(5000)
+      .then(({ data }) => {
+        const rows = (data as { rating: number; created_at: string }[] | null) ?? [];
+        const stat = (label: string, list: typeof rows): RatingStat => ({
+          label,
+          count: list.length,
+          average: list.length ? list.reduce((a, x) => a + x.rating, 0) / list.length : null,
+        });
+        setStats([
+          stat("Last 7 days", rows.filter((x) => new Date(x.created_at).getTime() >= since7)),
+          stat("Last 30 days", rows),
+        ]);
+      });
+  }, []);
+  if (!stats) return null;
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {stats.map((s) => (
+        <Card key={s.label} className="py-3">
+          <p className="text-xs text-ink-soft">{s.label}</p>
+          <p className="text-2xl font-semibold tabular-nums">
+            {s.average === null ? "—" : `${s.average.toFixed(1)} ★`}
+          </p>
+          <p className="text-xs text-ink-soft">
+            {s.count} rating{s.count === 1 ? "" : "s"}
+          </p>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 function FeedbackCard({ row: r, onMove }: { row: FeedbackRow; onMove: (id: string, next: FeedbackStatus) => void }) {
   const who = r.sender_name || (r.sender_is_guest ? "Guest" : "Someone");
   return (
@@ -153,7 +205,15 @@ function FeedbackCard({ row: r, onMove }: { row: FeedbackRow; onMove: (id: strin
               {FEEDBACK_CATEGORY_TEXT[r.category]}
             </span>
           )}
-          {r.rating !== null && <span className="text-sm" aria-label={`${r.rating} of 5 stars`}>{"★".repeat(r.rating)}</span>}
+          {r.kind === "post_meal" && (
+            <span className="rounded-full bg-warn/15 px-3 py-1 text-xs font-semibold text-ink">After the meal</span>
+          )}
+          {r.rating !== null && (
+            <span className="text-sm text-warn" aria-label={`${r.rating} of 5 stars`}>
+              {"★".repeat(r.rating)}
+              <span className="text-line">{"★".repeat(5 - r.rating)}</span>
+            </span>
+          )}
           <span className="font-semibold">{who}</span>
           {r.sender_is_guest && <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-ink-soft">guest</span>}
         </span>
