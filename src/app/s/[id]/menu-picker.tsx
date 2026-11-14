@@ -1,8 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Chip, Input, Label, Notice } from "@/components/ui";
-import { defaultSelection, groupsForItem, photoUrl, selectionProblems, toggleOption, unitPrice } from "@/lib/menu";
+import {
+  defaultSelection,
+  groupsForItem,
+  orderCategories,
+  orderedAtTable,
+  photoUrl,
+  selectionProblems,
+  toggleOption,
+  unitPrice,
+} from "@/lib/menu";
 import { formatMoney } from "@/lib/money";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
 import { SUPABASE_URL } from "@/lib/supabase/env";
@@ -12,13 +21,12 @@ import type { TabProps } from "./tab-props";
 
 /** Browse the store's menu by category; tap an item to choose options and add it. */
 export function MenuPicker({ data, me, reload, menu }: Pick<TabProps, "data" | "me" | "reload"> & { menu: Menu }) {
+  // Diner-friendly order unless the store's admin chose a custom one (OTC-24).
   const categories = useMemo(
-    () =>
-      [...menu.categories]
-        .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
-        .filter((c) => menu.items.some((i) => i.category_id === c.id)),
+    () => orderCategories(menu.categories, menu.items, Boolean(menu.store.custom_category_order)),
     [menu],
   );
+  const atTable = useMemo(() => orderedAtTable(menu.items, data.items), [menu.items, data.items]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [openItem, setOpenItem] = useState<MenuItem | null>(null);
@@ -51,6 +59,17 @@ export function MenuPicker({ data, me, reload, menu }: Pick<TabProps, "data" | "
     };
   }, [storeId]);
 
+  const listAnchor = useRef<HTMLDivElement>(null);
+  /** Switch category; if the list was scrolled down, jump back to its top. */
+  function pickCategory(id: string) {
+    setCategoryId(id);
+    const anchor = listAnchor.current;
+    if (!anchor) return;
+    const headerH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--table-header-h")) || 0;
+    const top = anchor.getBoundingClientRect().top;
+    if (top < headerH) window.scrollBy({ top: top - headerH, behavior: "smooth" });
+  }
+
   const activeCategory = categoryId ?? categories[0]?.id ?? null;
   const q = search.trim().toLowerCase();
   const items = menu.items
@@ -72,16 +91,31 @@ export function MenuPicker({ data, me, reload, menu }: Pick<TabProps, "data" | "
           setOpenItem(item);
         }}
       />
-      <Input aria-label="Search the menu" placeholder="Search the menu…" value={search} onChange={(e) => setSearch(e.target.value)} />
-      {!q && (
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
-          {categories.map((c) => (
-            <Chip key={c.id} selected={c.id === activeCategory} onClick={() => setCategoryId(c.id)} className="shrink-0">
-              {c.name}
-            </Chip>
-          ))}
-        </div>
-      )}
+      <OrderedAtTable
+        items={atTable}
+        onPick={(item) => {
+          setAdded("");
+          setPreset(null);
+          setOpenItem(item);
+        }}
+      />
+      {/* Search and category chips stay under the table header while scrolling. */}
+      <div ref={listAnchor} aria-hidden />
+      <div
+        className="sticky z-[5] -mx-4 flex flex-col gap-2 bg-background/95 px-4 pb-2 pt-1 backdrop-blur"
+        style={{ top: "var(--table-header-h, 0px)" }}
+      >
+        <Input aria-label="Search the menu" placeholder="Search the menu…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        {!q && (
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4">
+            {categories.map((c) => (
+              <Chip key={c.id} selected={c.id === activeCategory} onClick={() => pickCategory(c.id)} className="shrink-0">
+                {c.name}
+              </Chip>
+            ))}
+          </div>
+        )}
+      </div>
       {added && <Notice>{added} ✓</Notice>}
       <ul className="flex flex-col gap-2">
         {items.map((item) => {
@@ -114,7 +148,10 @@ export function MenuPicker({ data, me, reload, menu }: Pick<TabProps, "data" | "
                         {item.price_status === "estimated" ? "~" : ""}
                         {formatMoney(item.base_price_centavos, menu.store.currency)}
                       </span>
-                      {hasOptions && <span className="text-xs text-ink-soft">options</span>}
+                      <span className="mt-1 inline-block rounded-full bg-brand px-2.5 py-0.5 text-xs font-semibold text-white">
+                        + Add
+                      </span>
+                      {hasOptions && <span className="block text-xs text-ink-soft">options</span>}
                     </>
                   ) : (
                     <span className="text-ink-soft">Sold out</span>
@@ -160,6 +197,27 @@ interface Favorite {
   menu_item_id: string;
   option_ids: string[];
   notes: string;
+}
+
+/** "Ordered at this table": what others here already ordered, so it's easy to get the same. */
+function OrderedAtTable({ items, onPick }: { items: MenuItem[]; onPick: (item: MenuItem) => void }) {
+  if (!items.length) return null;
+  return (
+    <div>
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-soft">🍽 Ordered at this table</p>
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+        {items.slice(0, 10).map((item) => (
+          <button
+            key={item.id}
+            onClick={() => onPick(item)}
+            className="flex min-h-12 shrink-0 items-center rounded-2xl border border-line bg-surface px-3 py-1 text-left text-sm font-medium active:bg-muted"
+          >
+            {item.name}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /** "Your usuals" at this store: tap to open the item with your usual options. */
