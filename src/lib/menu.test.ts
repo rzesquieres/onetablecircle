@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   defaultSelection,
+  dinerCategoryRank,
+  orderCategories,
+  orderedAtTable,
   groupsForItem,
   optionsLabel,
   photoUrl,
@@ -100,5 +103,59 @@ describe("labels and photos", () => {
       "https://abc.supabase.co/storage/v1/object/public/menu-photos/store-1/latte%201.jpg",
     );
     expect(photoUrl("https://abc.supabase.co", null)).toBeNull();
+  });
+});
+
+describe("diner-friendly category order (OTC-24)", () => {
+  const cat = (id: string, name: string, sort_order: number) => ({ id, name, sort_order });
+  const cats = [
+    cat("d", "Desserts", 0),
+    cat("b", "Drinks", 1),
+    cat("m", "Rice Meals", 2),
+    cat("s", "Sides", 3),
+    cat("a", "Appetizers", 4),
+    cat("p", "Bestsellers", 5),
+    cat("f", "Good for Sharing", 6),
+    cat("x", "Merienda Corner", 7),
+    cat("e", "Empty section", 8),
+  ];
+  const items = ["d", "b", "m", "s", "a", "p", "f", "x"].map((category_id) => ({ category_id }));
+
+  it("ranks common Filipino menu section names", () => {
+    expect(dinerCategoryRank("Best Sellers")).toBe(0);
+    expect(dinerCategoryRank("Pulutan")).toBe(1);
+    expect(dinerCategoryRank("Silog Meals")).toBe(2);
+    expect(dinerCategoryRank("Barkada Platters")).toBe(3);
+    expect(dinerCategoryRank("Add-ons")).toBe(5);
+    expect(dinerCategoryRank("Milk Tea")).toBe(7);
+    expect(dinerCategoryRank("Halo-Halo")).toBe(8);
+  });
+
+  it("puts popular first, then starters, mains, sharing, sides, other, drinks, desserts; hides empty ones", () => {
+    expect(orderCategories(cats, items).map((c) => c.id)).toEqual(["p", "a", "m", "f", "s", "x", "b", "d"]);
+  });
+
+  it("keeps the admin's order within a group", () => {
+    const two = [cat("m2", "Pasta", 1), cat("m1", "Grill", 0)];
+    expect(orderCategories(two, [{ category_id: "m1" }, { category_id: "m2" }]).map((c) => c.id)).toEqual(["m1", "m2"]);
+  });
+
+  it("uses only the admin's order when the store has a custom order", () => {
+    expect(orderCategories(cats, items, true).map((c) => c.id)).toEqual(["d", "b", "m", "s", "a", "p", "f", "x"]);
+  });
+});
+
+describe("ordered at this table", () => {
+  const item = (id: string, is_available = true) => ({ id, is_available });
+  it("lists available menu items by quantity ordered, then most recent", () => {
+    const menuItems = [item("a"), item("b"), item("c"), item("gone", false), item("never")];
+    const orders = [
+      { menu_item_id: "a", quantity: 1, created_at: "2026-11-14T10:00:00Z" },
+      { menu_item_id: "b", quantity: 2, created_at: "2026-11-14T09:00:00Z" },
+      { menu_item_id: "c", quantity: 1, created_at: "2026-11-14T11:00:00Z" },
+      { menu_item_id: "gone", quantity: 5, created_at: "2026-11-14T11:00:00Z" },
+      { menu_item_id: null, quantity: 3, created_at: "2026-11-14T11:00:00Z" },
+    ];
+    expect(orderedAtTable(menuItems, orders).map((i) => i.id)).toEqual(["b", "c", "a"]);
   });
 });

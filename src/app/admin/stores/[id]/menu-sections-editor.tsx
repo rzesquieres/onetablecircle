@@ -2,8 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import { ConfirmButton } from "@/components/confirm-button";
-import { Button, Card, Input, Label, Notice } from "@/components/ui";
-import { photoUrl } from "@/lib/menu";
+import { Button, Card, Chip, Input, Label, Notice } from "@/components/ui";
+import { orderCategories, photoUrl } from "@/lib/menu";
 import { formatMoney } from "@/lib/money";
 import { deleteMenuPhoto, uploadMenuPhoto } from "@/lib/photos";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
@@ -41,6 +41,7 @@ export function MenuSectionsEditor(props: EditorProps) {
   return (
     <section className="flex flex-col gap-3">
       <h2 className="text-lg font-semibold">Menu</h2>
+      <CategoryOrderSetting {...props} />
       {categories.length === 0 && <p className="text-ink-soft">Start by adding a category, e.g. &quot;Coffee&quot; or &quot;Pasta&quot;.</p>}
       {categories.map((c, i) => (
         <CategoryCard
@@ -59,6 +60,29 @@ export function MenuSectionsEditor(props: EditorProps) {
         </form>
       </Card>
     </section>
+  );
+}
+
+/** Diner-friendly order (default) or the admin's own ↑↓ order for this store's menu (OTC-24). */
+function CategoryOrderSetting({ menu, act }: EditorProps) {
+  const custom = Boolean(menu.store.custom_category_order);
+  const set = (value: boolean) =>
+    value !== custom && act(getSupabase().from("stores").update({ custom_category_order: value }).eq("id", menu.store.id));
+  const preview = orderCategories(menu.categories, menu.items, custom).map((c) => c.name);
+  return (
+    <Card className="flex flex-col gap-2">
+      <p className="text-sm font-medium">Category order diners see</p>
+      <div className="flex flex-wrap gap-2">
+        <Chip selected={!custom} onClick={() => set(false)}>Diner-friendly (recommended)</Chip>
+        <Chip selected={custom} onClick={() => set(true)}>My order (↑↓ below)</Chip>
+      </div>
+      <p className="text-sm text-ink-soft">
+        {custom
+          ? "The menu follows the order below exactly."
+          : "Popular first, then starters, mains, sharing platters, sides, drinks and desserts. ↑↓ below only orders categories within the same group."}
+      </p>
+      {preview.length > 0 && <p className="text-xs text-ink-soft">Diners see: {preview.join(" → ")}</p>}
+    </Card>
   );
 }
 

@@ -23,6 +23,21 @@ export function TableScreen() {
   const { menu } = useMenu(data?.session.store_id ?? null);
   const [tab, setTab] = useState<Tab>("order");
   const [now, setNow] = useState(() => new Date());
+  const [headerEl, headerRef] = useState<HTMLElement | null>(null);
+
+  // Publish the sticky header's height so the menu's search/category bar can stick just below it.
+  useEffect(() => {
+    if (!headerEl) return;
+    const root = document.documentElement;
+    const update = () => root.style.setProperty("--table-header-h", `${headerEl.offsetHeight}px`);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(headerEl);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--table-header-h");
+    };
+  }, [headerEl]);
 
   // Re-render every 20s so the cutoff takes effect on screen without a reload.
   useEffect(() => {
@@ -59,7 +74,7 @@ export function TableScreen() {
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
-      <header className="sticky top-0 z-10 border-b border-line bg-background/95 px-4 pb-3 pt-4 backdrop-blur">
+      <header ref={headerRef} className="sticky top-0 z-10 border-b border-line bg-background/95 px-4 pb-3 pt-4 backdrop-blur">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <span className="flex items-center gap-3 text-sm text-ink-soft">

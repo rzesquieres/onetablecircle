@@ -95,3 +95,72 @@ export function publicStorageUrl(supabaseUrl: string, bucket: string, path: stri
 export function photoUrl(supabaseUrl: string, path: string | null): string | null {
   return publicStorageUrl(supabaseUrl, "menu-photos", path);
 }
+
+/**
+ * Diner-friendly category order (OTC-24). Diners look for what's popular
+ * first, then work through a meal: starters, mains, sharing platters, sides,
+ * drinks, dessert. Categories are matched to these groups by name; anything
+ * unrecognised goes between sides and drinks.
+ */
+const DINER_GROUPS: { rank: number; words: RegExp }[] = [
+  { rank: 0, words: /best ?sell|popular|recommend|featured|favou?rite|signature|special|must[- ]?try|top pick|chef|\bnew\b/ },
+  { rank: 1, words: /starter|appeti[sz]er|small plate|pica|pulutan|snack|salad|soup|bites|finger food|tapas/ },
+  { rank: 5, words: /\bsides?\b|add[- ]?ons?|\bextras?\b|\bsauces?\b|\bdips?\b|topping|condiment/ },
+  { rank: 3, words: /platter|sharing|share|family|group|barkada|bundle|boodle|for \d|good for|party/ },
+  { rank: 7, words: /drink|beverage|juice|coffee|\btea\b|shake|smoothie|soda|beer|wine|cocktail|liquor|refresher|frappe|latte|milk ?tea|lemonade|water/ },
+  { rank: 8, words: /dessert|sweet|cake|ice cream|halo|pastr|pie\b|kakanin|leche|gelato|waffle|donut|doughnut/ },
+  { rank: 2, words: /main|entr[eé]e|rice|meal|silog|pasta|noodle|pancit|grill|bbq|barbecue|chicken|pork|beef|seafood|fish|steak|burger|pizza|sandwich|wrap|bowl|ulam|vegetable|veggie|curry|ramen|sushi|dimsum|dim sum/ },
+];
+const OTHER_RANK = 6;
+
+/** Where a category name falls in the diner-friendly order (lower = shown earlier). */
+export function dinerCategoryRank(name: string): number {
+  const n = name.toLowerCase();
+  return DINER_GROUPS.find((g) => g.words.test(n))?.rank ?? OTHER_RANK;
+}
+
+/**
+ * Categories in the order the menu shows them, without empty ones.
+ * `custom` = the store's admin chose their own order (sort_order only);
+ * otherwise diner-friendly groups come first and sort_order breaks ties.
+ */
+export function orderCategories<C extends { id: string; name: string; sort_order: number }>(
+  categories: C[],
+  items: { category_id: string }[],
+  custom = false,
+): C[] {
+  const used = new Set(items.map((i) => i.category_id));
+  return categories
+    .filter((c) => used.has(c.id))
+    .sort(
+      (a, b) =>
+        (custom ? 0 : dinerCategoryRank(a.name) - dinerCategoryRank(b.name)) ||
+        a.sort_order - b.sort_order ||
+        a.name.localeCompare(b.name),
+    );
+}
+
+/**
+ * Menu items already ordered at this table, most-ordered first (ties: most
+ * recently ordered first). Only items still on the menu and available.
+ */
+export function orderedAtTable<I extends { id: string; is_available: boolean }>(
+  menuItems: I[],
+  orders: { menu_item_id: string | null; quantity: number; created_at: string }[],
+): I[] {
+  const stats = new Map<string, { qty: number; last: string }>();
+  for (const o of orders) {
+    if (!o.menu_item_id) continue;
+    const s = stats.get(o.menu_item_id) ?? { qty: 0, last: "" };
+    s.qty += o.quantity;
+    if (o.created_at > s.last) s.last = o.created_at;
+    stats.set(o.menu_item_id, s);
+  }
+  return menuItems
+    .filter((i) => i.is_available && stats.has(i.id))
+    .sort((a, b) => {
+      const sa = stats.get(a.id)!;
+      const sb = stats.get(b.id)!;
+      return sb.qty - sa.qty || sb.last.localeCompare(sa.last);
+    });
+}

@@ -69,6 +69,8 @@ export interface Store {
   default_service_charge_bps: number;
   source_url: string | null;
   menu_updated_at: string;
+  /** true = show categories in the admin's own order; false = diner-friendly order (OTC-24). */
+  custom_category_order: boolean;
   created_at: string;
 }
 
