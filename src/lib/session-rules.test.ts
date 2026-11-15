@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { acceptsOrders, billIsPaid, canRemoveItem, isActive } from "./session-rules";
+import { acceptsOrders, billIsPaid, canEditItem, canRemoveItem, editChangesItem, editProblem, isActive } from "./session-rules";
 
 const now = new Date("2026-11-08T12:00:00Z");
 
@@ -47,5 +47,40 @@ describe("canRemoveItem (OTC-25)", () => {
     expect(billIsPaid({ status: "billing" }, [])).toBe(false);
     expect(billIsPaid({ status: "billing" }, paid)).toBe(true);
     expect(billIsPaid({ status: "settled" }, [])).toBe(true);
+  });
+});
+
+describe("canEditItem (OTC-27)", () => {
+  it("follows the same rule as removing: orderer or host, until someone pays", () => {
+    const me = { id: "ana", isHost: false };
+    expect(canEditItem({ status: "closed" }, [], "ana", me)).toBe(true);
+    expect(canEditItem({ status: "open" }, [], "ben", me)).toBe(false);
+    expect(canEditItem({ status: "open" }, [], "ben", { id: "host", isHost: true })).toBe(true);
+    expect(canEditItem({ status: "billing" }, [{ marked_paid_at: "2026-11-15T01:00:00Z" }], "ana", me)).toBe(false);
+    expect(canEditItem({ status: "settled" }, [], "ana", me)).toBe(false);
+  });
+});
+
+describe("editChangesItem (OTC-27)", () => {
+  const item = { quantity: 1, notes: "", is_shared: false };
+  it("is false when nothing changed, whatever the order of people", () => {
+    expect(editChangesItem(item, ["ana"], { quantity: 1, notes: "  ", isShared: false, forIds: ["ana"] })).toBe(false);
+    const shared = { ...item, is_shared: true };
+    expect(editChangesItem(shared, ["ana", "ben"], { quantity: 1, notes: "", isShared: true, forIds: ["ben", "ana"] })).toBe(false);
+  });
+  it("is true when sharing, people, quantity or the note changes", () => {
+    expect(editChangesItem(item, ["ana"], { quantity: 1, notes: "", isShared: true, forIds: ["ana"] })).toBe(true);
+    expect(editChangesItem(item, ["ana"], { quantity: 1, notes: "", isShared: false, forIds: ["ben"] })).toBe(true);
+    expect(editChangesItem(item, ["ana"], { quantity: 2, notes: "", isShared: false, forIds: ["ana"] })).toBe(true);
+    expect(editChangesItem(item, ["ana"], { quantity: 1, notes: "less ice", isShared: false, forIds: ["ana"] })).toBe(true);
+  });
+});
+
+describe("editProblem (OTC-27)", () => {
+  it("needs someone, exactly one person if not shared, and a sensible quantity", () => {
+    expect(editProblem({ quantity: 1, notes: "", isShared: true, forIds: ["ana", "ben"] })).toBeNull();
+    expect(editProblem({ quantity: 1, notes: "", isShared: true, forIds: [] })).toMatch(/Choose who/);
+    expect(editProblem({ quantity: 1, notes: "", isShared: false, forIds: ["ana", "ben"] })).toMatch(/exactly one/);
+    expect(editProblem({ quantity: 0, notes: "", isShared: false, forIds: ["ana"] })).toMatch(/between 1 and 99/);
   });
 });
