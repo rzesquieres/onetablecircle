@@ -5,10 +5,15 @@ import { Button, Chip, Input, Label, Notice } from "@/components/ui";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
 import type { Participant } from "@/lib/types";
 
-/** State for "who is this item for": one person, or shared between several. */
-export function useForWhom(people: Participant[], meId: string) {
-  const [shared, setShared] = useState(false);
-  const [forIds, setForIds] = useState<string[]>([meId]);
+/**
+ * State for "who is this item for": one person, or shared between several.
+ * `initial` starts from an existing order (OTC-27 editing); unsharing it then
+ * goes back to the first person it was for.
+ */
+export function useForWhom(people: Participant[], meId: string, initial?: { shared: boolean; forIds: string[] }) {
+  const [shared, setShared] = useState(initial?.shared ?? false);
+  const [forIds, setForIds] = useState<string[]>(initial?.forIds.length ? initial.forIds : [meId]);
+  const soloId = initial?.forIds[0] ?? meId;
 
   return {
     shared,
@@ -20,7 +25,9 @@ export function useForWhom(people: Participant[], meId: string) {
     toggleShared() {
       const next = !shared;
       setShared(next);
-      setForIds(next ? people.map((p) => p.id) : [meId]);
+      if (next) setForIds(people.map((p) => p.id));
+      else if (!initial) setForIds([meId]);
+      else setForIds(forIds.length === 1 ? forIds : [soloId]);
     },
     reset() {
       setShared(false);

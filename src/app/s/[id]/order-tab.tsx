@@ -5,7 +5,8 @@ import { Button, Card, Notice } from "@/components/ui";
 import { optionsText } from "@/lib/consolidate";
 import { formatMoney } from "@/lib/money";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
-import { canRemoveItem } from "@/lib/session-rules";
+import { canEditItem } from "@/lib/session-rules";
+import { EditItemForm } from "./edit-item-form";
 import { FreeTextForm } from "./free-text-form";
 import { MenuPicker } from "./menu-picker";
 import { nameOf, type TabProps } from "./tab-props";
@@ -16,6 +17,8 @@ export function OrderTab(props: TabProps) {
   const [error, setError] = useState("");
   // Two taps to remove: the first arms the button, the second deletes.
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  // The order being edited (OTC-27), shown inline under the item.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const currency = data.session.currency;
   const hasStore = Boolean(data.session.store_id);
 
@@ -30,8 +33,9 @@ export function OrderTab(props: TabProps) {
     void reload();
   }
 
-  const canEdit = (addedBy: string) => canRemoveItem(data.session, data.payments, addedBy, { id: me.id, isHost });
-  // Removing an item after the bill was sent takes the bill back to be redone.
+  // Same rule for editing and removing: the orderer or the host, until the bill is paid.
+  const canEdit = (addedBy: string) => canEditItem(data.session, data.payments, addedBy, { id: me.id, isHost });
+  // Removing or editing an item after the bill was sent takes the bill back to be redone.
   const billSent = data.session.status === "billing";
   const items = [...data.items].reverse();
 
@@ -73,48 +77,65 @@ export function OrderTab(props: TabProps) {
               const opts = optionsText(item);
               return (
                 <li key={item.id}>
-                  <Card className="flex items-start justify-between gap-3 py-3">
-                    <div className="min-w-0">
-                      <p className="font-medium">
-                        {item.quantity}× {item.name}
-                      </p>
-                      {opts && <p className="text-sm">{opts}</p>}
-                      {item.notes && <p className="text-sm text-ink-soft">{item.notes}</p>}
-                      <p className="text-sm text-ink-soft">
-                        {item.is_shared ? `Shared: ${forNames.join(", ")}` : `For ${forNames.join(", ")}`}
-                        {showAddedBy ? ` · added by ${item.added_by === me.id ? "you" : nameOf(data, item.added_by)}` : ""}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      <span className="text-sm tabular-nums">
-                        {item.unit_price_centavos === null
-                          ? "—"
-                          : `${item.price_is_estimate ? "~" : ""}${formatMoney(item.unit_price_centavos * item.quantity, currency)}`}
-                      </span>
-                      {canEdit(item.added_by) &&
-                        (confirmId === item.id ? (
-                          <div className="flex flex-col items-end gap-1">
-                            {(billSent || item.added_by !== me.id) && (
-                              <p className="max-w-48 text-right text-xs text-ink-soft">
-                                {item.added_by !== me.id ? `${nameOf(data, item.added_by)} will be told in the app. ` : ""}
-                                {billSent ? "The bill goes back to the host to send again." : ""}
-                              </p>
-                            )}
+                  <Card className="flex flex-col gap-3 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-medium">
+                          {item.quantity}× {item.name}
+                        </p>
+                        {opts && <p className="text-sm">{opts}</p>}
+                        {item.notes && <p className="text-sm text-ink-soft">{item.notes}</p>}
+                        <p className="text-sm text-ink-soft">
+                          {item.is_shared ? `Shared: ${forNames.join(", ")}` : `For ${forNames.join(", ")}`}
+                          {showAddedBy ? ` · added by ${item.added_by === me.id ? "you" : nameOf(data, item.added_by)}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <span className="text-sm tabular-nums">
+                          {item.unit_price_centavos === null
+                            ? "—"
+                            : `${item.price_is_estimate ? "~" : ""}${formatMoney(item.unit_price_centavos * item.quantity, currency)}`}
+                        </span>
+                        {canEdit(item.added_by) && editingId !== item.id &&
+                          (confirmId === item.id ? (
+                            <div className="flex flex-col items-end gap-1">
+                              {(billSent || item.added_by !== me.id) && (
+                                <p className="max-w-48 text-right text-xs text-ink-soft">
+                                  {item.added_by !== me.id ? `${nameOf(data, item.added_by)} will be told in the app. ` : ""}
+                                  {billSent ? "The bill goes back to the host to send again." : ""}
+                                </p>
+                              )}
+                              <div className="flex gap-1">
+                                <Button variant="ghost" className="min-h-9 px-2 text-sm" onClick={() => setConfirmId(null)}>
+                                  Keep
+                                </Button>
+                                <Button className="min-h-9 bg-danger px-2 text-sm active:bg-danger" onClick={() => remove(item.id)}>
+                                  {item.added_by === me.id ? "Remove" : `Remove ${nameOf(data, item.added_by)}'s`}
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
                             <div className="flex gap-1">
-                              <Button variant="ghost" className="min-h-9 px-2 text-sm" onClick={() => setConfirmId(null)}>
-                                Keep
+                              <Button
+                                variant="ghost"
+                                className="min-h-9 px-2 text-sm"
+                                onClick={() => {
+                                  setConfirmId(null);
+                                  setEditingId(item.id);
+                                }}
+                              >
+                                Edit
                               </Button>
-                              <Button className="min-h-9 bg-danger px-2 text-sm active:bg-danger" onClick={() => remove(item.id)}>
-                                {item.added_by === me.id ? "Remove" : `Remove ${nameOf(data, item.added_by)}'s`}
+                              <Button variant="danger" className="min-h-9 px-2 text-sm" onClick={() => remove(item.id)}>
+                                Remove
                               </Button>
                             </div>
-                          </div>
-                        ) : (
-                          <Button variant="danger" className="min-h-9 px-2 text-sm" onClick={() => remove(item.id)}>
-                            Remove
-                          </Button>
-                        ))}
+                          ))}
+                      </div>
                     </div>
+                    {editingId === item.id && canEdit(item.added_by) && (
+                      <EditItemForm item={item} data={data} me={me} reload={reload} onDone={() => setEditingId(null)} />
+                    )}
                   </Card>
                 </li>
               );

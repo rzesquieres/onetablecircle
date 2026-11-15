@@ -259,7 +259,8 @@ describe("ordering", () => {
 
     it("quantity cannot be reduced below what was served", async () => {
       await expect(
-        as(FRIEND, () => db.query("update public.order_items set quantity = 1 where id = $1", [latteId])),
+        // OTC-27: edits go through edit_order_item().
+        as(FRIEND, () => db.query("select public.edit_order_item($1, 1, '', false, $2)", [latteId, [friendPid]])),
       ).rejects.toThrow(/already served/);
     });
   });
@@ -272,7 +273,7 @@ describe("ordering", () => {
       as(FRIEND, () =>
         db.query("select public.add_order_item($1, 'Late cake', 15000, 1, '', false, $2)", [sessionId, [friendPid]]),
       ),
-    ).rejects.toThrow(/row-level security/);
+    ).rejects.toThrow(/Ordering is closed/);
     await as(FRIEND, () =>
       db.query("insert into public.delivery_events (order_item_id, delta, by_participant_id) values ($1, 1, $2)", [latteId, friendPid]),
     );
