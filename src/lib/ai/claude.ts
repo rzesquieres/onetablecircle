@@ -2,9 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { AI_MENU_JSON_SCHEMA, AiMenuSchema, type AiMenu } from "./menu-draft";
 import { AI_RECEIPT_JSON_SCHEMA, AiReceiptSchema, type AiReceipt } from "./receipt-draft";
-
-/** Default per the Claude API guide; override with ANTHROPIC_MODEL on Hostinger if you want a cheaper model. */
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
+import { menuModel, receiptModel } from "./models";
 /** On a safety decline, the API re-runs the request on a fallback model it picks (server-side). */
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 const MAX_CONTINUATIONS = 5;
@@ -26,11 +24,11 @@ type Params = Omit<Anthropic.Beta.MessageCreateParamsStreaming, "stream" | "beta
  * fallback. Server-tool turns that pause (`pause_turn`) are resumed up to
  * MAX_CONTINUATIONS times by sending the paused assistant turn back.
  */
-async function run(params: Params): Promise<Anthropic.Beta.BetaMessage> {
+async function run(params: Params, model: string = menuModel()): Promise<Anthropic.Beta.BetaMessage> {
   const messages = [...params.messages];
   for (let i = 0; i <= MAX_CONTINUATIONS; i++) {
     const message = await getClient()
-      .beta.messages.stream({ ...params, messages, model: MODEL, betas: [FALLBACK_BETA], fallbacks: "default" })
+      .beta.messages.stream({ ...params, messages, model, betas: [FALLBACK_BETA], fallbacks: "default" })
       .finalMessage();
     if (message.stop_reason !== "pause_turn") return message;
     messages.push({ role: "assistant", content: message.content });
@@ -144,12 +142,17 @@ Rules:
 
 /** Read a receipt photo (one or more images) into lines and charges. */
 export async function extractReceipt(content: Anthropic.Beta.BetaContentBlockParam[]): Promise<AiReceipt> {
+  const model = receiptModel();
   const message = await run({
     max_tokens: 32000,
     system: RECEIPT_SYSTEM,
     output_config: { effort: "medium", format: { type: "json_schema", schema: AI_RECEIPT_JSON_SCHEMA } },
     messages: [{ role: "user", content: [...content, { type: "text", text: "Read this receipt." }] }],
-  });
+  }, model);
+  // Model and usage per scan, for comparing costs with Console → Usage (OTC-26).
+  console.info(
+    `[receipt-scan] model=${message.model} requested=${model} in=${message.usage.input_tokens} out=${message.usage.output_tokens}`,
+  );
   if (message.stop_reason === "refusal") throw new Error("The AI declined to read this receipt. Try another photo.");
   if (message.stop_reason === "max_tokens") throw new Error("This receipt is too long to read. Try typing it in instead.");
   let json: unknown;
