@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Notifications } from "@/components/notifications";
 import { Button, Card, Input, Notice, Spinner } from "@/components/ui";
 import { formatMoney } from "@/lib/money";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
@@ -244,6 +245,8 @@ export function HomeScreen() {
           )}
         </span>
       </div>
+
+      <Notifications userId={user.id} />
 
       {isGuest ? (
         <Notice>

@@ -201,3 +201,14 @@ export interface DeliveryEvent {
   by_participant_id: string | null;
   created_at: string;
 }
+
+/** An in-app message for one user (OTC-25: "Ronnel removed your order: …"). */
+export interface AppNotification {
+  id: string;
+  user_id: string;
+  session_id: string | null;
+  kind: "order_removed";
+  body: string;
+  created_at: string;
+  read_at: string | null;
+}

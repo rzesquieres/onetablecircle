@@ -192,18 +192,19 @@ describe("ordering", () => {
     expect(r).toHaveLength(0);
   });
 
-  it("friend cannot delete the host's item, host can delete any item", async () => {
-    const del = await as(FRIEND, () =>
-      rows("delete from public.order_items where id = $1 returning id", [platterId]),
-    );
-    expect(del).toHaveLength(0);
+  // OTC-25: removing goes through remove_order_item() (see remove-order-item.db.test.ts).
+  it("friend cannot remove the host's item, host can remove any item", async () => {
+    await expect(
+      as(FRIEND, () => db.query("delete from public.order_items where id = $1", [platterId])),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      as(FRIEND, () => db.query("select public.remove_order_item($1)", [platterId])),
+    ).rejects.toThrow(/Only the person who ordered it/);
     const tmp = await as(FRIEND, () =>
       one<{ id: string }>("select public.add_order_item($1, 'Water', 0, 1, '', false, $2) as id", [sessionId, [friendPid]]),
     );
-    const del2 = await as(HOST, () =>
-      rows("delete from public.order_items where id = $1 returning id", [tmp.id]),
-    );
-    expect(del2).toHaveLength(1);
+    await as(HOST, () => db.query("select public.remove_order_item($1)", [tmp.id]));
+    expect(await rows("select id from public.order_items where id = $1", [tmp.id])).toHaveLength(0);
   });
 
   describe("delivery checklist", () => {

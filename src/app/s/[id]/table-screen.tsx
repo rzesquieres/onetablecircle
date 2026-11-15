@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { Notifications } from "@/components/notifications";
 import { Notice, Spinner } from "@/components/ui";
 import { consolidate, progress } from "@/lib/consolidate";
 import { feedbackHref } from "@/lib/feedback";
@@ -98,6 +99,7 @@ export function TableScreen() {
           </div>
         </div>
         {error && <div className="mt-2"><Notice tone="error">{error}</Notice></div>}
+        {me?.user_id && <div className="mt-2"><Notifications userId={me.user_id} /></div>}
       </header>
 
       <main className="flex-1 px-4 pb-28 pt-4">

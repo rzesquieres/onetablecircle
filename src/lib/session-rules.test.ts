@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { acceptsOrders, isActive } from "./session-rules";
+import { acceptsOrders, billIsPaid, canRemoveItem, isActive } from "./session-rules";
 
 const now = new Date("2026-11-08T12:00:00Z");
 
@@ -19,5 +19,33 @@ describe("isActive", () => {
     expect(isActive({ status: "open" })).toBe(true);
     expect(isActive({ status: "closed" })).toBe(true);
     expect(isActive({ status: "billing" })).toBe(false);
+  });
+});
+
+describe("canRemoveItem (OTC-25)", () => {
+  const ana = { id: "ana", isHost: false };
+  const host = { id: "host", isHost: true };
+  const ben = { id: "ben", isHost: false };
+  const unpaid = [{ marked_paid_at: null }];
+  const paid = [{ marked_paid_at: "2026-11-15T01:00:00Z" }];
+
+  it("lets the person who ordered and the host remove, nobody else", () => {
+    expect(canRemoveItem({ status: "open" }, [], "ana", ana)).toBe(true);
+    expect(canRemoveItem({ status: "open" }, [], "ana", host)).toBe(true);
+    expect(canRemoveItem({ status: "open" }, [], "ana", ben)).toBe(false);
+  });
+
+  it("still allows it after ordering closes and after the bill is sent, until someone pays", () => {
+    expect(canRemoveItem({ status: "closed" }, [], "ana", ana)).toBe(true);
+    expect(canRemoveItem({ status: "billing" }, unpaid, "ana", ana)).toBe(true);
+    expect(canRemoveItem({ status: "billing" }, paid, "ana", ana)).toBe(false);
+    expect(canRemoveItem({ status: "billing" }, paid, "ana", host)).toBe(false);
+    expect(canRemoveItem({ status: "settled" }, [], "ana", host)).toBe(false);
+  });
+
+  it("billIsPaid matches the database", () => {
+    expect(billIsPaid({ status: "billing" }, [])).toBe(false);
+    expect(billIsPaid({ status: "billing" }, paid)).toBe(true);
+    expect(billIsPaid({ status: "settled" }, [])).toBe(true);
   });
 });

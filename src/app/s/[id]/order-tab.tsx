@@ -5,7 +5,7 @@ import { Button, Card, Notice } from "@/components/ui";
 import { optionsText } from "@/lib/consolidate";
 import { formatMoney } from "@/lib/money";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
-import { isActive } from "@/lib/session-rules";
+import { canRemoveItem } from "@/lib/session-rules";
 import { FreeTextForm } from "./free-text-form";
 import { MenuPicker } from "./menu-picker";
 import { nameOf, type TabProps } from "./tab-props";
@@ -23,13 +23,16 @@ export function OrderTab(props: TabProps) {
     if (confirmId !== itemId) return setConfirmId(itemId);
     setConfirmId(null);
     setError("");
-    const { data: deleted, error } = await getSupabase().from("order_items").delete().eq("id", itemId).select("id");
+    // The database checks who may remove it and that the bill isn't paid, and
+    // tells the person who ordered it when the host removes it (OTC-25).
+    const { error } = await getSupabase().rpc("remove_order_item", { p_item_id: itemId });
     if (error) setError(friendlyError(error));
-    else if (!deleted?.length) setError("Couldn't remove that item. Ordering may have closed.");
     void reload();
   }
 
-  const canEdit = (addedBy: string) => (addedBy === me.id && ordersOpen) || (isHost && isActive(data.session));
+  const canEdit = (addedBy: string) => canRemoveItem(data.session, data.payments, addedBy, { id: me.id, isHost });
+  // Removing an item after the bill was sent takes the bill back to be redone.
+  const billSent = data.session.status === "billing";
   const items = [...data.items].reverse();
 
   return (
@@ -90,13 +93,21 @@ export function OrderTab(props: TabProps) {
                       </span>
                       {canEdit(item.added_by) &&
                         (confirmId === item.id ? (
-                          <div className="flex gap-1">
-                            <Button variant="ghost" className="min-h-9 px-2 text-sm" onClick={() => setConfirmId(null)}>
-                              Keep
-                            </Button>
-                            <Button className="min-h-9 bg-danger px-2 text-sm active:bg-danger" onClick={() => remove(item.id)}>
-                              {item.added_by === me.id ? "Remove" : `Remove ${nameOf(data, item.added_by)}'s`}
-                            </Button>
+                          <div className="flex flex-col items-end gap-1">
+                            {(billSent || item.added_by !== me.id) && (
+                              <p className="max-w-48 text-right text-xs text-ink-soft">
+                                {item.added_by !== me.id ? `${nameOf(data, item.added_by)} will be told in the app. ` : ""}
+                                {billSent ? "The bill goes back to the host to send again." : ""}
+                              </p>
+                            )}
+                            <div className="flex gap-1">
+                              <Button variant="ghost" className="min-h-9 px-2 text-sm" onClick={() => setConfirmId(null)}>
+                                Keep
+                              </Button>
+                              <Button className="min-h-9 bg-danger px-2 text-sm active:bg-danger" onClick={() => remove(item.id)}>
+                                {item.added_by === me.id ? "Remove" : `Remove ${nameOf(data, item.added_by)}'s`}
+                              </Button>
+                            </div>
                           </div>
                         ) : (
                           <Button variant="danger" className="min-h-9 px-2 text-sm" onClick={() => remove(item.id)}>
