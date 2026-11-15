@@ -66,7 +66,8 @@ In hPanel: your website dashboard → **Environment variables** → **Add enviro
 | `SUPABASE_SECRET_KEY` | later (admin/AI jobs) | Supabase → Project Settings → API Keys → Secret key (`sb_secret_...`) | **YES**, never share |
 | `NEXT_PUBLIC_GOOGLE_SIGNIN` | once Google is enabled in Supabase | `on` shows the "Continue with Google" button; leave unset to hide it | no |
 | `ANTHROPIC_API_KEY` | Phase 4 (AI menu import) | <https://console.anthropic.com> → API Keys | **YES**, never share |
-| `ANTHROPIC_MODEL` | optional | Leave unset to use `claude-opus-5-5`. Set `claude-sonnet-5-5` to halve the cost per import. | no |
+| `ANTHROPIC_MODEL` | optional | Model for menu import and "AI add store". Leave unset to use `claude-opus-5-5`. Set `claude-sonnet-5-5` to halve the cost per import. Does not affect receipt scanning. | no |
+| `ANTHROPIC_RECEIPT_MODEL` | optional | Model for receipt scanning. Leave unset to use `claude-sonnet-5-5`. Set `claude-haiku-5-5` for a much cheaper scan once you've checked it reads your receipts well. | no |
 | `RESEND_API_KEY` *or* `BREVO_API_KEY` | OTC-18 (email when an admin restores a user) | The same sender service you use for Supabase custom SMTP ([EMAIL-VERIFICATION.md](EMAIL-VERIFICATION.md)) → API keys. Set only one. | **YES**, never share |
 | `EMAIL_FROM` | optional | Leave unset to send as `OneTableCircle <no-reply@onetablecircle.com>`. The domain must be verified with the sender service. | no |
 
