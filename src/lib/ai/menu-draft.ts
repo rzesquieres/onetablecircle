@@ -1,7 +1,7 @@
 /**
  * The menu format Claude returns (structured output), and pure helpers that
  * turn it into an editable draft and then into the payload for the database
- * function apply_menu_import(). Prices travel as text ("180.50") and become
+ * function apply_menu_import_v2(). Prices travel as text ("180.50") and become
  * integer centavos here; floats never touch money.
  */
 import { z } from "zod";
@@ -133,8 +133,6 @@ export interface DraftItem {
   description: string;
   price: string; // "" when the menu didn't show one
   groups: string[];
-  /** Same name already on the store's menu (left unticked by default). */
-  duplicate: boolean;
 }
 export interface DraftCategory {
   include: boolean;
@@ -164,9 +162,8 @@ export function priceText(raw: string | null | undefined): string {
 
 export function toDraft(
   result: ImportResult,
-  opts: { existingItemNames?: string[]; storeName?: string; branch?: string } = {},
+  opts: { storeName?: string; branch?: string } = {},
 ): Draft {
-  const existing = new Set((opts.existingItemNames ?? []).map(key));
   const { menu } = result;
   const groups: DraftGroup[] = menu.option_groups
     .filter((g) => clean(g.name) && g.options.length)
@@ -189,14 +186,12 @@ export function toDraft(
     byName.set(key(name), target);
     for (const it of cat.items) {
       if (!clean(it.name)) continue;
-      const duplicate = existing.has(key(it.name));
       target.items.push({
-        include: !duplicate,
+        include: true,
         name: clean(it.name),
         description: clean(it.description),
         price: priceText(it.price),
         groups: it.option_groups.map(clean).filter((g) => groupNames.has(key(g))),
-        duplicate,
       });
     }
   }

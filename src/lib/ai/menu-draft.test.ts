@@ -49,7 +49,7 @@ describe("priceText", () => {
 });
 
 describe("toDraft", () => {
-  const d = toDraft(result, { existingItemNames: ["americano"] });
+  const d = toDraft(result);
 
   it("cleans names, merges same-named categories, drops empties", () => {
     expect(d.storeName).toBe("Kape Ni Juan");
@@ -59,13 +59,13 @@ describe("toDraft", () => {
     expect(d.categories.map((c) => [c.name, c.items.length])).toEqual([["Coffee", 3]]);
   });
 
-  it("keeps only known option groups and marks duplicates unticked", () => {
+  it("keeps only known option groups and ticks every item", () => {
     const [latte, americano, mocha] = d.categories[0].items;
     expect(latte.groups).toEqual(["Size"]);
     expect(latte.price).toBe("165");
-    expect(americano).toMatchObject({ duplicate: true, include: false, price: "" });
+    expect(americano).toMatchObject({ include: true, price: "" });
     expect(mocha.price).toBe("1250.50");
-    expect(countIncluded(d)).toBe(2);
+    expect(countIncluded(d)).toBe(3);
   });
 });
 

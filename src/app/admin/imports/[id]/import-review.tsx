@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { Button, Card, Input, Label, Notice, Spinner } from "@/components/ui";
+import { useParams } from "next/navigation";
+import { Button, Card, Chip, Input, Label, Notice, Spinner } from "@/components/ui";
 import {
   countIncluded,
   draftProblems,
@@ -14,6 +14,18 @@ import {
   type DraftGroup,
   type ImportResult,
 } from "@/lib/ai/menu-draft";
+import {
+  filterStores,
+  planMerge,
+  storeLabel,
+  suggestStores,
+  summaryText,
+  type AppliedSummary,
+  type ExistingItem,
+  type ItemPlan,
+  type StoreChoice,
+} from "@/lib/ai/menu-merge";
+import { formatMoney, parseMoney } from "@/lib/money";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
 import { AdminGate } from "../../admin-gate";
 
@@ -22,7 +34,7 @@ interface Job {
   kind: "add_store" | "import_url" | "import_file";
   status: "running" | "ready" | "failed" | "applied";
   input: { name?: string; branch?: string; url?: string; files?: string[] };
-  result: ImportResult | null;
+  result: (ImportResult & { applied_summary?: AppliedSummary }) | null;
   error: string | null;
   store_id: string | null;
   created_at: string;
@@ -39,8 +51,8 @@ export function ImportReview() {
 function Review() {
   const { id } = useParams<{ id: string }>();
   const [job, setJob] = useState<Job | null | undefined>(undefined);
-  const [storeName, setStoreName] = useState("");
-  const [existing, setExisting] = useState<string[] | null>(null);
+  const [fixedStore, setFixedStore] = useState<StoreChoice | null | undefined>(undefined);
+  const [stores, setStores] = useState<StoreChoice[] | null>(null);
 
   // Poll while the AI is working.
   useEffect(() => {
@@ -59,19 +71,29 @@ function Review() {
     };
   }, [id]);
 
-  // For imports into an existing store: its name, and item names (to spot duplicates).
+  // Import started from a store's editor: that store. "AI add store": every
+  // store, so the admin can pick one to update instead of creating a duplicate.
   const storeId = job?.store_id ?? null;
   const isReady = job?.status === "ready";
   useEffect(() => {
-    if (!storeId || !isReady) return;
+    if (!isReady) return;
     const supabase = getSupabase();
-    Promise.all([
-      supabase.from("stores").select("name, branch").eq("id", storeId).maybeSingle(),
-      supabase.from("menu_items").select("name").eq("store_id", storeId),
-    ]).then(([s, i]) => {
-      setStoreName([s.data?.name, s.data?.branch].filter(Boolean).join(" · "));
-      setExisting((i.data ?? []).map((r) => r.name as string));
-    });
+    if (storeId) {
+      supabase
+        .from("stores")
+        .select("id, name, branch, status")
+        .eq("id", storeId)
+        .maybeSingle()
+        .then(({ data }) => setFixedStore((data as StoreChoice) ?? null));
+    } else {
+      supabase
+        .from("stores")
+        .select("id, name, branch, status")
+        .neq("status", "archived")
+        .order("name")
+        .limit(1000)
+        .then(({ data }) => setStores((data as StoreChoice[]) ?? []));
+    }
   }, [storeId, isReady]);
 
   if (job === undefined) return <Spinner />;
@@ -91,6 +113,7 @@ function Review() {
         ? "Import from link"
         : `Import from ${job.input.files?.length ?? 0} file(s)`;
   const back = job.store_id ? `/admin/stores/${job.store_id}` : "/admin";
+  const summary = job.result?.applied_summary;
 
   return (
     <div className="flex flex-col gap-6">
@@ -98,7 +121,7 @@ function Review() {
         <Link href={back} className="text-sm text-ink-soft">← Back</Link>
         <h1 className="text-2xl font-semibold">{title}</h1>
         {job.kind === "import_url" && <p className="break-all text-sm text-ink-soft">{job.input.url}</p>}
-        {storeName && <p className="text-sm text-ink-soft">Into: {storeName}</p>}
+        {fixedStore && <p className="text-sm text-ink-soft">Into: {storeLabel(fixedStore)}</p>}
       </div>
 
       {job.status === "running" && (
@@ -118,16 +141,26 @@ function Review() {
 
       {job.status === "applied" && (
         <div className="flex flex-col gap-3">
-          <Notice>This import has already been added.</Notice>
-          {job.store_id && <Link href={`/admin/stores/${job.store_id}`} className="text-brand">Open the store</Link>}
+          <Notice>{summary ? `Done. ${summaryText(summary)}` : "This import has already been added."}</Notice>
+          {job.store_id && (
+            <Link href={`/admin/stores/${job.store_id}`} className="text-brand">
+              Open the store
+            </Link>
+          )}
         </div>
       )}
 
-      {job.status === "ready" && job.result && (job.store_id === null || existing !== null) && (
+      {job.status === "ready" && job.store_id && fixedStore === null && (
+        <Notice tone="error">The store for this import was not found.</Notice>
+      )}
+
+      {job.status === "ready" && job.result && (job.store_id ? Boolean(fixedStore) : stores !== null) && (
         <DraftEditor
           job={job}
+          fixedStore={job.store_id ? (fixedStore ?? null) : null}
+          stores={stores ?? []}
+          onApplied={(s) => setJob({ ...job, status: "applied", store_id: s.store_id, result: { ...job.result!, applied_summary: s } })}
           initial={toDraft(job.result, {
-            existingItemNames: existing ?? [],
             storeName: job.kind === "add_store" ? job.input.name : undefined,
             branch: job.kind === "add_store" ? job.input.branch : undefined,
           })}
@@ -137,9 +170,58 @@ function Review() {
   );
 }
 
-function DraftEditor({ job, initial }: { job: Job; initial: Draft }) {
-  const router = useRouter();
+type Target = "new" | "existing";
+type Mode = "merge" | "replace";
+
+/** The chosen store's current items, with category names (for the merge preview). */
+function useExistingItems(storeId: string | null) {
+  const [loaded, setLoaded] = useState<{ storeId: string; items: ExistingItem[] } | null>(null);
+  useEffect(() => {
+    if (!storeId) return;
+    let cancelled = false;
+    const supabase = getSupabase();
+    Promise.all([
+      supabase.from("menu_items").select("id, name, category_id, base_price_centavos, is_available").eq("store_id", storeId),
+      supabase.from("menu_categories").select("id, name").eq("store_id", storeId),
+    ]).then(([i, c]) => {
+      if (cancelled) return;
+      const cats = new Map((c.data ?? []).map((r) => [r.id as string, r.name as string]));
+      setLoaded({
+        storeId,
+        items: (i.data ?? []).map((r) => ({
+          id: r.id as string,
+          name: r.name as string,
+          categoryName: cats.get(r.category_id as string) ?? "",
+          base_price_centavos: Number(r.base_price_centavos),
+          is_available: Boolean(r.is_available),
+        })),
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [storeId]);
+  return storeId && loaded?.storeId === storeId ? loaded.items : null;
+}
+
+function DraftEditor({
+  job,
+  initial,
+  fixedStore,
+  stores,
+  onApplied,
+}: {
+  job: Job;
+  initial: Draft;
+  fixedStore: StoreChoice | null;
+  stores: StoreChoice[];
+  onApplied: (s: AppliedSummary) => void;
+}) {
   const [draft, setDraft] = useState<Draft>(initial);
+  const [target, setTarget] = useState<Target>(fixedStore ? "existing" : "new");
+  const [picked, setPicked] = useState<StoreChoice | null>(null);
+  const [search, setSearch] = useState("");
+  const [mode, setMode] = useState<Mode>("merge");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [tried, setTried] = useState(false);
@@ -148,6 +230,12 @@ function DraftEditor({ job, initial }: { job: Job; initial: Draft }) {
   const warnings = job.result?.warnings ?? [];
   const sources = job.result?.sources ?? [];
 
+  const targetStore = fixedStore ?? (target === "existing" ? picked : null);
+  const existing = useExistingItems(targetStore?.id ?? null);
+  const plan = targetStore && existing ? planMerge(draft, existing, mode) : null;
+  const suggestions = fixedStore ? [] : suggestStores(draft.storeName || job.input.name || "", draft.branch, stores);
+  const matches = target === "existing" && !fixedStore ? filterStores(search, stores) : [];
+
   const update = (fn: (d: Draft) => void) =>
     setDraft((d) => {
       const copy: Draft = structuredClone(d);
@@ -155,21 +243,34 @@ function DraftEditor({ job, initial }: { job: Job; initial: Draft }) {
       return copy;
     });
 
+  function pickStore(s: StoreChoice) {
+    setTarget("existing");
+    setPicked(s);
+    setSearch("");
+  }
+
   async function apply() {
     setTried(true);
     if (problems.length) return;
+    if (target === "existing" && !targetStore) {
+      setError("Pick the restaurant to update.");
+      return;
+    }
     setBusy(true);
     setError("");
-    const { data, error } = await getSupabase().rpc("apply_menu_import", {
+    const { data, error } = await getSupabase().rpc("apply_menu_import_v2", {
       p_job_id: job.id,
       p_menu: toApplyPayload(draft),
+      p_target_store_id: target === "existing" ? targetStore!.id : null,
+      p_mode: mode,
     });
     if (error) {
       setError(friendlyError(error));
       setBusy(false);
       return;
     }
-    router.push(`/admin/stores/${data}`);
+    window.scrollTo({ top: 0 });
+    onApplied(data as AppliedSummary);
   }
 
   if (!draft.categories.length) {
@@ -181,11 +282,22 @@ function DraftEditor({ job, initial }: { job: Job; initial: Draft }) {
     );
   }
 
+  const waiting = Boolean(targetStore) && !existing;
+  const buttonText = busy
+    ? "Saving…"
+    : target === "new"
+      ? `Create draft store with ${included} items`
+      : !targetStore
+        ? "Pick a restaurant to update"
+        : waiting
+          ? "Loading its menu…"
+          : `Update menu: ${plan!.updated} updated, ${plan!.added} added${mode === "replace" ? `, ${plan!.hidden.length} hidden` : ""}`;
+
   return (
     <div className="flex flex-col gap-6 pb-28">
       <Notice>
-        Check this against the real menu. Untick anything wrong, fix names and prices, then add it. All prices will be
-        marked &quot;estimated&quot; until you confirm them in the store editor.
+        Check this against the real menu. Untick anything wrong, fix names and prices, then save it. New and changed
+        prices will be marked &quot;estimated&quot; until you confirm them in the store editor.
       </Notice>
 
       {(warnings.length > 0 || sources.length > 0) && (
@@ -213,23 +325,109 @@ function DraftEditor({ job, initial }: { job: Job; initial: Draft }) {
         </Card>
       )}
 
-      {job.kind === "add_store" && (
+      {!fixedStore && (
         <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold">New store (saved as a draft)</h2>
-          <Card className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <Label>Name</Label>
-              <Input maxLength={80} value={draft.storeName} onChange={(e) => update((d) => { d.storeName = e.target.value; })} />
-            </div>
-            <div>
-              <Label>Branch</Label>
-              <Input maxLength={80} value={draft.branch} onChange={(e) => update((d) => { d.branch = e.target.value; })} />
-            </div>
-            <div className="sm:col-span-2">
-              <Label>Source link (saved on the store)</Label>
-              <Input inputMode="url" value={draft.sourceUrl} onChange={(e) => update((d) => { d.sourceUrl = e.target.value; })} />
-            </div>
-          </Card>
+          <h2 className="text-lg font-semibold">Which restaurant is this menu for?</h2>
+          <div className="flex flex-wrap gap-2">
+            <Chip selected={target === "new"} onClick={() => setTarget("new")}>Create a new restaurant</Chip>
+            <Chip selected={target === "existing"} onClick={() => setTarget("existing")}>Update an existing restaurant</Chip>
+          </div>
+
+          {target === "new" && suggestions.length > 0 && (
+            <Notice tone="warn">
+              <span className="flex flex-col gap-2">
+                <span>Already in the app? These look similar:</span>
+                <span className="flex flex-wrap gap-2">
+                  {suggestions.map((s) => (
+                    <Button key={s.id} variant="secondary" className="min-h-11 text-sm" onClick={() => pickStore(s)}>
+                      Update {storeLabel(s)}
+                    </Button>
+                  ))}
+                </span>
+              </span>
+            </Notice>
+          )}
+
+          {target === "new" && (
+            <Card className="grid gap-3 sm:grid-cols-2">
+              <p className="text-sm text-ink-soft sm:col-span-2">Saved as a draft until you publish it.</p>
+              <div>
+                <Label>Name</Label>
+                <Input maxLength={80} value={draft.storeName} onChange={(e) => update((d) => { d.storeName = e.target.value; })} />
+              </div>
+              <div>
+                <Label>Branch</Label>
+                <Input maxLength={80} value={draft.branch} onChange={(e) => update((d) => { d.branch = e.target.value; })} />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Source link (saved on the store)</Label>
+                <Input inputMode="url" value={draft.sourceUrl} onChange={(e) => update((d) => { d.sourceUrl = e.target.value; })} />
+              </div>
+            </Card>
+          )}
+
+          {target === "existing" && (
+            <Card className="flex flex-col gap-3">
+              {picked ? (
+                <div className="flex items-center justify-between gap-2">
+                  <p className="min-w-0 truncate font-semibold">{storeLabel(picked)}</p>
+                  <Button variant="ghost" className="min-h-11 shrink-0 px-3 text-sm" onClick={() => setPicked(null)}>Change</Button>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <Label htmlFor="store-search">Find the restaurant</Label>
+                    <Input id="store-search" placeholder="Name or branch" value={search} onChange={(e) => setSearch(e.target.value)} />
+                  </div>
+                  {matches.length ? (
+                    <ul className="flex flex-col divide-y divide-line">
+                      {[...(search.trim() ? [] : suggestions), ...matches]
+                        .filter((s, i, all) => all.findIndex((x) => x.id === s.id) === i)
+                        .slice(0, 8)
+                        .map((s) => (
+                          <li key={s.id}>
+                            <button type="button" className="flex min-h-12 w-full items-center justify-between gap-2 py-2 text-left active:bg-muted" onClick={() => pickStore(s)}>
+                              <span className="min-w-0 truncate">{storeLabel(s)}</span>
+                              {s.status === "draft" && <span className="shrink-0 text-xs text-ink-soft">Draft</span>}
+                            </button>
+                          </li>
+                        ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-ink-soft">No restaurant matches “{search}”.</p>
+                  )}
+                </>
+              )}
+            </Card>
+          )}
+        </section>
+      )}
+
+      {targetStore && (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold">How should the menu be updated?</h2>
+          <div className="flex flex-wrap gap-2">
+            <Chip selected={mode === "merge"} onClick={() => setMode("merge")}>Merge with existing menu</Chip>
+            <Chip selected={mode === "replace"} onClick={() => setMode("replace")}>Replace existing menu</Chip>
+          </div>
+          <p className="text-sm text-ink-soft">
+            {mode === "merge"
+              ? "Items with the same name get the new price and details. New items are added. Items not in this upload stay as they are."
+              : "Same as merge, but items not in this upload are hidden from the menu (not deleted, so past orders stay intact)."}
+          </p>
+          {plan && (
+            <Card className="text-sm">
+              <p className="font-semibold">
+                {plan.updated} updated · {plan.added} added{mode === "replace" ? ` · ${plan.hidden.length} hidden` : ""}
+              </p>
+              {mode === "replace" && plan.hidden.length > 0 && (
+                <p className="mt-1 text-ink-soft">
+                  Will be hidden: {plan.hidden.slice(0, 10).map((e) => e.name).join(", ")}
+                  {plan.hidden.length > 10 ? ` and ${plan.hidden.length - 10} more` : ""}
+                </p>
+              )}
+            </Card>
+          )}
         </section>
       )}
 
@@ -248,6 +446,7 @@ function DraftEditor({ job, initial }: { job: Job; initial: Draft }) {
           <CategoryDraft
             key={ci}
             category={c}
+            plans={plan?.plans[ci] ?? null}
             groupNames={draft.groups.filter((g) => g.include).map((g) => g.name)}
             tried={tried}
             onChange={(fn) => update((d) => fn(d.categories[ci]))}
@@ -264,8 +463,12 @@ function DraftEditor({ job, initial }: { job: Job; initial: Draft }) {
             </p>
           )}
           {error && <Notice tone="error">{error}</Notice>}
-          <Button className="min-h-14 text-lg" disabled={busy || included === 0} onClick={apply}>
-            {busy ? "Adding…" : job.kind === "add_store" ? `Create draft store with ${included} items` : `Add ${included} items to the menu`}
+          <Button
+            className="min-h-14 text-lg"
+            disabled={busy || included === 0 || waiting || (target === "existing" && !targetStore)}
+            onClick={apply}
+          >
+            {buttonText}
           </Button>
         </div>
       </div>
@@ -308,11 +511,13 @@ function GroupDraft({ group, onChange }: { group: DraftGroup; onChange: (fn: (g:
 
 function CategoryDraft({
   category,
+  plans,
   groupNames,
   tried,
   onChange,
 }: {
   category: DraftCategory;
+  plans: (ItemPlan | null)[] | null;
   groupNames: string[];
   tried: boolean;
   onChange: (fn: (c: DraftCategory) => void) => void;
@@ -357,7 +562,7 @@ function CategoryDraft({
                   onChange={(e) => onChange((c) => { c.items[ii].description = e.target.value; })}
                 />
                 <p className="text-xs text-ink-soft">
-                  {item.duplicate && <span className="font-semibold text-warn">Already on the menu · </span>}
+                  {plans?.[ii] && <PlanLabel plan={plans[ii]!} price={item.price} category={category.name} />}
                   {missing && <span className="font-semibold text-warn">No price on the menu · </span>}
                   {item.groups.filter((g) => live.has(g.toLowerCase())).length
                     ? `Options: ${item.groups.filter((g) => live.has(g.toLowerCase())).join(", ")}`
@@ -369,5 +574,20 @@ function CategoryDraft({
         </ul>
       )}
     </Card>
+  );
+}
+
+/** "New" or "Updates existing · ₱165 → ₱175" next to an item, for imports into an existing store. */
+function PlanLabel({ plan, price, category }: { plan: ItemPlan; price: string; category: string }) {
+  if (plan.kind === "new") return <span className="font-semibold text-brand">New · </span>;
+  const next = parseMoney(price);
+  const old = formatMoney(plan.existing.base_price_centavos);
+  return (
+    <span className="font-semibold text-warn">
+      Updates existing
+      {plan.priceChanged && next !== null ? ` · ${old} → ${formatMoney(next)}` : ` · ${old}, same price`}
+      {plan.moved ? ` · moves from ${plan.existing.categoryName || "another category"} to ${category}` : ""}
+      {" · "}
+    </span>
   );
 }
