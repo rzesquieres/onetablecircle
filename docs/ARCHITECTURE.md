@@ -8,6 +8,7 @@ Implemented so far, one migration per phase in `supabase/migrations/`:
 - Phase 4: `20261109100000_phase4_ai_import.sql` (`menu_import_jobs`, `apply_menu_import()`, `menu_reports`)
 - Phase 5: `20261110000000_phase5_bill.sql` (receipts, lines, line↔item/people links, `bill_shares`, `payments`, `finalize_bill()` / `reopen_bill()` / `mark_paid()` / `confirm_payment()`, receipt-photo and payment-QR storage)
 
+- Menu import merge (OTC-28): `20261117000000_menu_import_merge.sql` (`apply_menu_import_v2()`, `menu_name_key()`)
 - Phase 6: `20261110100000_phase6_groups_favorites_stats.sql` (`saved_groups` / `saved_group_members`, `add_saved_group_to_session()`, `favorites`, `admin_stats()`)
 
 ### Saved groups, favorites, history, analytics (Phase 6)
@@ -35,7 +36,12 @@ Implemented so far, one migration per phase in `supabase/migrations/`:
    - **AI add store** first runs a research call with Claude's `web_search` and `web_fetch` server tools, then extracts from that text.
    - Extraction uses structured output (a JSON schema), and the app validates the result with zod. Prices come back as text and become integer centavos only in `menu-draft.ts`.
    - Model `claude-opus-5-5` (override with `ANTHROPIC_MODEL`), effort `medium`, streamed, with server-side refusal fallback (`fallbacks: "default"`). Paused turns (`pause_turn`) are resumed.
-3. The review page `/admin/imports/<id>` checks the job until it is `ready`. The admin ticks, edits and prices items, then calls `apply_menu_import()`, which writes everything in one transaction with `price_status = 'estimated'`. New stores are created as **drafts**.
+3. The review page `/admin/imports/<id>` checks the job until it is `ready`. The admin ticks, edits and prices items, then calls `apply_menu_import_v2()` (OTC-28, `20261117000000_menu_import_merge.sql`), which writes everything in one transaction:
+   - **Which restaurant:** an AI add store job can **create a new restaurant** (saved as a **draft**) or **update an existing one**. Similar existing names are suggested (`suggestStores()` in `src/lib/ai/menu-merge.ts`). Imports started from a store's editor always go into that store.
+   - **Merge** (default): items with the same name (case and extra spaces ignored, same category preferred) are updated in place: price, description (an empty one keeps the old), category. New items are added. Items missing from the upload are left alone. **Replace** works the same, but items missing from the upload are hidden (`is_available = false`), never deleted, so past orders and favourites keep working.
+   - New prices and changed prices become `price_status = 'estimated'`. An unchanged price keeps its status. Option groups are reused by name; their choices' prices are updated and new choices added.
+   - The review page previews this per item (`planMerge()`), and the counts are saved on the job as `result.applied_summary`.
+   - The older `apply_menu_import()` (always adds) is kept only so the previous app version keeps working while a deploy rolls out.
 4. Users flag wrong items from the item sheet (`menu_reports`). Admins handle them at `/admin/reports`.
 
 All six planned phases are implemented.
