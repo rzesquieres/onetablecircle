@@ -234,31 +234,129 @@ export function similarity(a: string, b: string): number {
 }
 
 /**
- * Suggest which ordered items each receipt line pays for. Each item is used
- * once; a line takes the best-matching items until their quantities reach
- * the line's quantity. Returns item ids per line (same order as `lines`).
+ * Receipt text as a lookup key for learned matches (OTC-29): lower case,
+ * accents and punctuation removed, a leading quantity ("2 ", "2x ") dropped.
+ * Must stay the same as public.receipt_text_key() in the database.
  */
-export function suggestMatches(
+export function receiptTextKey(text: string): string {
+  return text
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/^[0-9]+ ?x? /, "");
+}
+
+/**
+ * What a receipt line was matched to, as stored in learned matches: the menu
+ * item, or for typed-in orders the order's name. Same as
+ * public.order_item_match_target().
+ */
+export function matchTarget(item: Pick<OrderItem, "menu_item_id" | "name">): string {
+  return item.menu_item_id ? `menu:${item.menu_item_id}` : `name:${receiptTextKey(item.name)}`;
+}
+
+/** A (receipt text -> item) pair the store has learned, with its net confirmations. */
+export interface LearnedMatch {
+  text_key: string;
+  target: string;
+  score: number;
+}
+
+export type MatchSource = "learned" | "auto";
+export interface LineMatch {
+  itemIds: string[];
+  /** "learned" when the match came from earlier receipts at this store. */
+  source: MatchSource | null;
+}
+
+type MatchItem = Pick<OrderItem, "id" | "name" | "quantity" | "options" | "created_at"> &
+  Partial<Pick<OrderItem, "menu_item_id">>;
+
+/**
+ * Suggest which ordered items each receipt line pays for. Each item is used
+ * once; a line takes items until their quantities reach the line's quantity.
+ * Lines whose text the store has learned (`learned`) are matched that way
+ * first; the rest are matched by how alike the names are.
+ */
+export function suggestLineMatches(
   lines: { description: string; quantity: number }[],
-  items: Pick<OrderItem, "id" | "name" | "quantity" | "options" | "created_at">[],
+  items: MatchItem[],
+  learned: LearnedMatch[] = [],
   threshold = 0.6,
-): string[][] {
+): LineMatch[] {
   const used = new Set<string>();
-  const label = (i: (typeof items)[number]) => [i.name, ...(i.options ?? []).map((o) => o.option)].join(" ");
-  return lines.map((line) => {
+  const byCreated = (a: MatchItem, b: MatchItem) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
+  const take = (line: { quantity: number }, candidates: MatchItem[]) => {
+    const picked: string[] = [];
+    let qty = 0;
+    for (const i of candidates) {
+      if (qty >= Math.max(1, line.quantity)) break;
+      if (used.has(i.id)) continue;
+      picked.push(i.id);
+      used.add(i.id);
+      qty += i.quantity;
+    }
+    return picked;
+  };
+
+  const known = new Map<string, LearnedMatch[]>();
+  for (const m of learned) {
+    if (m.score <= 0) continue;
+    const list = known.get(m.text_key) ?? [];
+    list.push(m);
+    known.set(m.text_key, list);
+  }
+
+  // 1. What earlier receipts at this store taught us.
+  const result: LineMatch[] = lines.map((line) => {
+    const options = [...(known.get(receiptTextKey(line.description)) ?? [])].sort(
+      (a, b) => b.score - a.score || (a.target < b.target ? -1 : 1),
+    );
+    const candidates = options.flatMap((m) =>
+      items.filter((i) => matchTarget({ menu_item_id: i.menu_item_id ?? null, name: i.name }) === m.target).sort(byCreated),
+    );
+    const itemIds = take(line, candidates);
+    return { itemIds, source: itemIds.length ? "learned" : null };
+  });
+
+  // 2. Guess by name for the rest.
+  const label = (i: MatchItem) => [i.name, ...(i.options ?? []).map((o) => o.option)].join(" ");
+  lines.forEach((line, n) => {
+    if (result[n].itemIds.length) return;
     const candidates = items
       .filter((i) => !used.has(i.id))
       .map((i) => ({ i, score: Math.max(similarity(line.description, i.name), similarity(line.description, label(i))) }))
       .filter((c) => c.score >= threshold)
-      .sort((a, b) => b.score - a.score || (a.i.created_at < b.i.created_at ? -1 : 1));
-    const picked: string[] = [];
-    let qty = 0;
-    for (const c of candidates) {
-      if (qty >= Math.max(1, line.quantity)) break;
-      picked.push(c.i.id);
-      used.add(c.i.id);
-      qty += c.i.quantity;
-    }
-    return picked;
+      .sort((a, b) => b.score - a.score || byCreated(a.i, b.i))
+      .map((c) => c.i);
+    const itemIds = take(line, candidates);
+    result[n] = { itemIds, source: itemIds.length ? "auto" : null };
   });
+  return result;
+}
+
+/** Item ids per line, matching by name only. */
+export function suggestMatches(
+  lines: { description: string; quantity: number }[],
+  items: MatchItem[],
+  threshold = 0.6,
+): string[][] {
+  return suggestLineMatches(lines, items, [], threshold).map((m) => m.itemIds);
+}
+
+/**
+ * For a learned match: true when the line's amount is far from what the
+ * matched items cost when ordered (over 25% off), so the host should check
+ * it. False when any matched item has no price (nothing to compare).
+ */
+export function learnedPriceOff(
+  lineAmount: number,
+  items: Pick<OrderItem, "unit_price_centavos" | "quantity">[],
+): boolean {
+  if (!items.length || items.some((i) => i.unit_price_centavos === null)) return false;
+  const expected = items.reduce((a, i) => a + (i.unit_price_centavos ?? 0) * i.quantity, 0);
+  if (expected <= 0) return lineAmount > 0;
+  return Math.abs(lineAmount - expected) * 4 > expected;
 }

@@ -1,5 +1,5 @@
 import { after, type NextRequest } from "next/server";
-import { suggestMatches } from "@/lib/bill";
+import { suggestLineMatches, type LearnedMatch } from "@/lib/bill";
 import { aiConfigured, extractReceipt } from "@/lib/ai/claude";
 import { toReceiptRows } from "@/lib/ai/receipt-draft";
 import { fileBlocks } from "@/lib/ai/source";
@@ -98,12 +98,20 @@ export async function POST(request: NextRequest) {
         .select("id, description, quantity, sort_order");
       if (lineError || !inserted) throw new Error(lineError?.message ?? "Couldn't save the receipt lines.");
 
-      // Pre-match lines to what people ordered; the host checks these.
+      // Pre-match lines to what people ordered: first what earlier receipts at
+      // this store taught us (OTC-29), then by name. The host checks these.
       const { data: items } = await supabase.from("order_items").select("*").eq("session_id", sessionId);
+      const { data: learned, error: learnedError } = await supabase.rpc("learned_receipt_matches", { p_session_id: sessionId });
+      if (learnedError) console.error("[receipt-scan] learned matches unavailable", learnedError.message);
       const ordered = [...inserted].sort((a, b) => a.sort_order - b.sort_order);
-      const matches = suggestMatches(ordered, (items ?? []) as OrderItem[]);
+      const matches = suggestLineMatches(ordered, (items ?? []) as OrderItem[], (learned ?? []) as LearnedMatch[]);
       const links = ordered.flatMap((l, i) =>
-        matches[i].map((itemId) => ({ receipt_line_id: l.id, order_item_id: itemId, session_id: sessionId })),
+        matches[i].itemIds.map((itemId) => ({
+          receipt_line_id: l.id,
+          order_item_id: itemId,
+          session_id: sessionId,
+          source: matches[i].source ?? "auto",
+        })),
       );
       if (links.length) await supabase.from("receipt_line_items").insert(links);
 
