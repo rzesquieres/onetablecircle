@@ -85,8 +85,24 @@ export interface Share {
   discount: number;
   scPwdDiscount: number;
   tip: number;
+  /** Paid for this person by others: a treat, or their celebrant share (OTC-33). */
+  covered: number;
+  /** This person pays for others. */
+  covering: number;
+  /** Who covered whom, for showing in the breakdown. */
+  adjustments: Adjustment[];
   total: number;
   breakdown: BreakdownLine[];
+}
+
+/** One move of money between two people's shares (OTC-33). */
+export interface Adjustment {
+  /** The other person. */
+  participantId: string;
+  amount: number;
+  kind: "treat" | "celebrant";
+  /** "in": this person pays it for the other; "out": the other pays it for this person. */
+  direction: "in" | "out";
 }
 
 export interface BillResult {
@@ -98,7 +114,8 @@ export interface BillResult {
 }
 
 export interface BillInput {
-  participants: (Pick<Participant, "id" | "joined_at"> & { sc_pwd?: Participant["sc_pwd"] })[];
+  participants: (Pick<Participant, "id" | "joined_at"> &
+    Partial<Pick<Participant, "sc_pwd" | "covered_by" | "is_celebrant">>)[];
   items: Pick<OrderItem, "id" | "quantity" | "created_at" | "added_by">[];
   assignees: Pick<Assignee, "order_item_id" | "participant_id" | "share_weight">[];
   lines: BillLine[];
@@ -119,6 +136,9 @@ export function computeBill(input: BillInput): BillResult {
     discount: 0,
     scPwdDiscount: 0,
     tip: 0,
+    covered: 0,
+    covering: 0,
+    adjustments: [],
     total: 0,
     breakdown: [],
   }));
@@ -228,8 +248,70 @@ export function computeBill(input: BillInput): BillResult {
     if (s.total < 0) problems.push("A discount is bigger than someone's share");
   }
 
+  if (!problems.some((p) => p.includes("discount"))) applyTreats(people, shares, problems);
+
   const total = itemsTotal + service + tax + tip - discount - shares.reduce((a, s) => a + s.scPwdDiscount, 0);
   return { shares, itemsTotal, total, problems: [...new Set(problems)] };
+}
+
+// ---------- Treats ("libre") and celebrants (OTC-33) ----------
+
+/**
+ * Move money between shares, after everyone's own share is worked out:
+ * 1. Each celebrant's share is spread evenly across everyone who isn't celebrating.
+ * 2. Each covered person's whole balance (including their part of the celebrant)
+ *    goes to whoever ends up paying for them, following chains (Ben -> Ana -> host).
+ * Totals still add up exactly: money only moves, it isn't created.
+ */
+function applyTreats(people: BillInput["participants"], shares: Share[], problems: string[]) {
+  const index = new Map(people.map((p, i) => [p.id, i]));
+  const move = (from: number, to: number, amount: number, kind: Adjustment["kind"]) => {
+    if (amount <= 0) return;
+    shares[from].covered += amount;
+    shares[from].total -= amount;
+    shares[to].covering += amount;
+    shares[to].total += amount;
+    shares[from].adjustments.push({ participantId: people[to].id, amount, kind, direction: "out" });
+    shares[to].adjustments.push({ participantId: people[from].id, amount, kind, direction: "in" });
+  };
+
+  const celebrants = people.map((p, i) => i).filter((i) => people[i].is_celebrant);
+  if (celebrants.length) {
+    const others = people.map((p, i) => i).filter((i) => !people[i].is_celebrant);
+    if (!others.length) {
+      problems.push("Not everyone can be the celebrant");
+      return;
+    }
+    for (const c of celebrants) {
+      const amount = shares[c].total;
+      allocate(amount, others.map(() => 1)).forEach((part, k) => move(c, others[k], part, "celebrant"));
+    }
+  }
+
+  // Who finally pays for each covered person.
+  const payerOf = (i: number): number | null => {
+    const seen = new Set<number>([i]);
+    let cur = i;
+    for (;;) {
+      const next = people[cur].covered_by ? index.get(people[cur].covered_by!) : undefined;
+      if (next === undefined || people[cur].is_celebrant) return cur === i ? null : cur;
+      if (seen.has(next)) return -1;
+      seen.add(next);
+      cur = next;
+    }
+  };
+  for (let i = 0; i < people.length; i++) {
+    if (people[i].is_celebrant) continue;
+    const payer = payerOf(i);
+    if (payer === null) continue;
+    if (payer === -1) {
+      problems.push("Some people are covering each other in a loop");
+      continue;
+    }
+    // Chains resolve straight to the final payer, so nobody in the middle of a
+    // chain has picked up anyone else's share: their whole balance moves.
+    move(i, payer, shares[i].total, "treat");
+  }
 }
 
 // ---------- Senior / PWD discount (OTC-31) ----------

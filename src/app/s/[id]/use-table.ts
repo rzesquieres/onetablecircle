@@ -110,6 +110,8 @@ export function useTable(sessionId: string) {
         "discount_centavos",
         "sc_pwd_discount_centavos",
         "tip_centavos",
+        "covered_centavos",
+        "covering_centavos",
         "total_centavos",
       ]) as unknown as BillShareRow[],
       payments: (pay.data ?? []) as Payment[],

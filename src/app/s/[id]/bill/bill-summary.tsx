@@ -9,6 +9,7 @@ import { friendlyError, getSupabase } from "@/lib/supabase/client";
 import { SUPABASE_URL } from "@/lib/supabase/env";
 import type { BillShareRow } from "@/lib/types";
 import { nameOf, type TabProps } from "../tab-props";
+import { adjustmentRows } from "./bill-data";
 import { RatingPrompt } from "./rating-prompt";
 
 export function BillSummary({ data, me, isHost, reload }: TabProps) {
@@ -37,7 +38,7 @@ export function BillSummary({ data, me, isHost, reload }: TabProps) {
     <div className="flex flex-col gap-5">
       {settled && <Notice>✓ This table is settled. Thanks for using OneTableCircle!</Notice>}
 
-      {mine && <MyShare share={mine} isHost={me.is_host} />}
+      {mine && <MyShare share={mine} isHost={me.is_host} name={(pid) => nameOf(data, pid)} />}
 
       {!me.is_host && mine && mine.total_centavos > 0 && (
         <Card className="flex flex-col items-center gap-3 text-center">
@@ -80,7 +81,9 @@ export function BillSummary({ data, me, isHost, reload }: TabProps) {
               const status = isTheHost
                 ? "Host"
                 : s.total_centavos === 0
-                  ? "Nothing to pay"
+                  ? (s.covered_centavos ?? 0) > 0
+                    ? "Covered 🎉"
+                    : "Nothing to pay"
                   : p?.confirmed_at
                     ? "Paid ✓"
                     : p?.marked_paid_at
@@ -155,7 +158,7 @@ function order(data: TabProps["data"], s: BillShareRow) {
   return data.participants.findIndex((p) => p.id === s.participant_id);
 }
 
-function MyShare({ share, isHost }: { share: BillShareRow; isHost: boolean }) {
+function MyShare({ share, isHost, name }: { share: BillShareRow; isHost: boolean; name: (pid: string) => string }) {
   return (
     <Card className="flex flex-col gap-2">
       <p className="text-sm text-ink-soft">{isHost ? "Your share (you paid the restaurant)" : "Your share"}</p>
@@ -174,6 +177,9 @@ function MyShare({ share, isHost }: { share: BillShareRow; isHost: boolean }) {
         {(share.sc_pwd_discount_centavos ?? 0) > 0 && (
           <Line label="Senior/PWD discount" value={-(share.sc_pwd_discount_centavos ?? 0)} />
         )}
+        {adjustmentRows(share.adjustments, name).map((row, k) => (
+          <Line key={`adj-${k}`} label={row.label} value={row.value} />
+        ))}
       </ul>
     </Card>
   );

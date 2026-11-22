@@ -231,6 +231,76 @@ describe("computeBill", () => {
     });
   });
 
+  describe("treats and celebrants (OTC-33)", () => {
+    // Own food: host 100, Ana 200, Ben 300, Dan 400 (no charges).
+    const ps = [P("host", 0), P("ana", 1), P("ben", 2), P("dan", 3)];
+    const lines = [
+      line("h", 10000, { split: "people", people: [{ participantId: "host", weight: 1 }] }),
+      line("a", 20000, { split: "people", people: [{ participantId: "ana", weight: 1 }] }),
+      line("b", 30000, { split: "people", people: [{ participantId: "ben", weight: 1 }] }),
+      line("d", 40000, { split: "people", people: [{ participantId: "dan", weight: 1 }] }),
+    ];
+    const run = (patch: Record<string, Partial<{ covered_by: string; is_celebrant: boolean }>>) =>
+      computeBill({ ...base, participants: ps.map((p) => ({ ...p, ...patch[p.id] })), lines });
+    const totals = (r: ReturnType<typeof computeBill>) => Object.fromEntries(r.shares.map((s) => [s.participantId, s.total]));
+
+    it("someone covers another person's whole share", () => {
+      const r = run({ ben: { covered_by: "ana" } });
+      expect(r.problems).toEqual([]);
+      expect(totals(r)).toEqual({ host: 10000, ana: 50000, ben: 0, dan: 40000 });
+      const ana = r.shares.find((s) => s.participantId === "ana")!;
+      expect(ana.covering).toBe(30000);
+      expect(ana.adjustments).toEqual([{ participantId: "ben", amount: 30000, kind: "treat", direction: "in" }]);
+      expect(r.shares.find((s) => s.participantId === "ben")!.adjustments).toEqual([
+        { participantId: "ana", amount: 30000, kind: "treat", direction: "out" },
+      ]);
+      expect(r.total).toBe(100000);
+    });
+
+    it("one person treats everyone", () => {
+      const r = run({ host: { covered_by: "dan" }, ana: { covered_by: "dan" }, ben: { covered_by: "dan" } });
+      expect(totals(r)).toEqual({ host: 0, ana: 0, ben: 0, dan: 100000 });
+    });
+
+    it("follows chains to whoever finally pays", () => {
+      const r = run({ ben: { covered_by: "ana" }, ana: { covered_by: "dan" } });
+      expect(totals(r)).toEqual({ host: 10000, ana: 0, ben: 0, dan: 90000 });
+    });
+
+    it("the celebrant's share is spread evenly across everyone else", () => {
+      const r = run({ dan: { is_celebrant: true } });
+      // 400.00 / 3 = 133.34 + 133.33 + 133.33 (extra centavo to whoever joined first)
+      expect(totals(r)).toEqual({ host: 23334, ana: 33333, ben: 43333, dan: 0 });
+      expect(sum(r.shares.map((s) => s.total))).toBe(r.total);
+    });
+
+    it("a covered person's part of the celebrant goes to whoever covers them", () => {
+      const r = run({ dan: { is_celebrant: true }, ben: { covered_by: "ana" } });
+      expect(totals(r)).toEqual({ host: 23334, ana: 33333 + 43333, ben: 0, dan: 0 });
+    });
+
+    it("flags loops and an all-celebrant table", () => {
+      expect(run({ ana: { covered_by: "ben" }, ben: { covered_by: "ana" } }).problems).toContain(
+        "Some people are covering each other in a loop",
+      );
+      const all = Object.fromEntries(ps.map((p) => [p.id, { is_celebrant: true }]));
+      expect(run(all).problems).toContain("Not everyone can be the celebrant");
+    });
+
+    it("works with charges and discounts; money only moves", () => {
+      const r = computeBill({
+        ...base,
+        participants: ps.map((p) => (p.id === "ana" ? { ...p, sc_pwd: "senior" as const, covered_by: "host" } : p)),
+        lines,
+        charges: { service: 10000, tax: 0, discount: 0, tip: 2001, scPwdDiscount: 5714 },
+      });
+      expect(r.problems).toEqual([]);
+      expect(sum(r.shares.map((s) => s.total))).toBe(r.total);
+      expect(sum(r.shares.map((s) => s.covered))).toBe(sum(r.shares.map((s) => s.covering)));
+      expect(r.shares.find((s) => s.participantId === "ana")!.total).toBe(0);
+    });
+  });
+
   it("reports lines nobody pays for and over-sized discounts", () => {
     const r = computeBill({
       ...base,
