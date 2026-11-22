@@ -18,7 +18,8 @@ export async function GET(request: NextRequest) {
   // Unlike ?code=, these work even if the link opens in a different browser or the mail app.
   const tokenHash = request.nextUrl.searchParams.get("token_hash");
   const type = request.nextUrl.searchParams.get("type");
-  if (tokenHash && (type === "signup" || type === "email" || type === "recovery")) {
+  // "email_change": a guest saving their account with an email (OTC-36).
+  if (tokenHash && (type === "signup" || type === "email" || type === "recovery" || type === "email_change")) {
     const supabase = await createServerSupabase();
     const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
     if (!error) return NextResponse.redirect(new URL(type === "recovery" ? "/reset-password" : next, origin));

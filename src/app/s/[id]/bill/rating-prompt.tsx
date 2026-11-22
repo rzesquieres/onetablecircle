@@ -13,12 +13,17 @@ const LABELS = ["", "Didn't work", "Had problems", "OK", "Good", "Great"];
  * once it's sent, once per person per table. Small card under the amounts, so
  * it never hides what anyone owes.
  */
-export function RatingPrompt({ sessionId }: { sessionId: string }) {
+export function RatingPrompt({ sessionId, onDone }: { sessionId: string; onDone?: () => void }) {
   const [state, setState] = useState<"checking" | "ask" | "thanks" | "hidden">("checking");
   const [rating, setRating] = useState(0);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  // Tell the bill once this prompt is out of the way, so the next one (OTC-36) can show.
+  useEffect(() => {
+    if (state === "hidden" || state === "thanks") onDone?.();
+  }, [state, onDone]);
 
   useEffect(() => {
     let cancelled = false;

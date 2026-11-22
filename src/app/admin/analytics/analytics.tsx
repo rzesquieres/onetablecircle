@@ -22,6 +22,13 @@ interface Stats {
   open_reports: number;
 }
 
+interface PromptStats {
+  shown_users: number;
+  converted_users: number;
+  shown_30d: number;
+  converted_30d: number;
+}
+
 export function Analytics() {
   return (
     <AdminGate>
@@ -35,6 +42,17 @@ const shortDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateStrin
 function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState("");
+  // OTC-36: guests who saw "create an account" after a bill, and how many did.
+  const [prompt, setPrompt] = useState<PromptStats | null>(null);
+
+  useEffect(() => {
+    getSupabase()
+      .rpc("admin_account_prompt_stats")
+      .then(({ data, error }) => {
+        // Missing until its migration runs: just leave the tiles out.
+        if (!error) setPrompt(data as PromptStats);
+      });
+  }, []);
 
   useEffect(() => {
     getSupabase()
@@ -66,6 +84,24 @@ function Dashboard() {
             <Tile label="Open reports" value={stats.open_reports} href={stats.open_reports ? "/admin/reports" : undefined} />
             <Tile label="Free-text tables (90 days)" value={stats.free_text_tables_90d} sub="no store picked" />
           </div>
+          {prompt && (
+            <div className="grid grid-cols-2 gap-3">
+              <Tile
+                label="Guests asked to save an account"
+                value={prompt.shown_users}
+                sub={`${prompt.shown_30d} in 30 days`}
+              />
+              <Tile
+                label="Guests who created one"
+                value={prompt.converted_users}
+                sub={
+                  prompt.shown_users
+                    ? `${Math.round((prompt.converted_users / prompt.shown_users) * 100)}% · ${prompt.converted_30d} in 30 days`
+                    : `${prompt.converted_30d} in 30 days`
+                }
+              />
+            </div>
+          )}
           <WeeklyChart weekly={stats.weekly} />
           <TopStores stores={stats.top_stores} />
         </>
