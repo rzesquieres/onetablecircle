@@ -64,7 +64,7 @@ export interface BreakdownLine {
   lineId: string;
   description: string;
   amount: number;
-  /** e.g. "shared by 3" */
+  /** e.g. "shared by 3", or "2 of 5 portions" when portions differ */
   note: string;
 }
 
@@ -128,7 +128,14 @@ export function computeBill(input: BillInput): BillResult {
     const known = list.filter((x) => index.has(x.participantId));
     known.sort((a, b) => index.get(a.participantId)! - index.get(b.participantId)!);
     const parts = allocate(amount, known.map((x) => x.weight));
-    return known.map((x, i) => ({ pid: x.participantId, amount: parts[i], count: known.length }));
+    const totalWeight = known.reduce((a, x) => a + x.weight, 0);
+    const even = known.every((x) => x.weight === known[0]?.weight);
+    return known.map((x, i) => ({
+      pid: x.participantId,
+      amount: parts[i],
+      count: known.length,
+      note: known.length < 2 ? "" : even ? `shared by ${known.length}` : `${x.weight} of ${totalWeight} portions`,
+    }));
   };
 
   let itemsTotal = 0;
@@ -146,7 +153,7 @@ export function computeBill(input: BillInput): BillResult {
         continue;
       }
       for (const s of splitAmong(line.amount, line.people)) {
-        give(s.pid, line, s.amount, s.count > 1 ? `shared by ${s.count}` : "");
+        give(s.pid, line, s.amount, s.note);
       }
       continue;
     }
@@ -166,7 +173,7 @@ export function computeBill(input: BillInput): BillResult {
         .map((a) => ({ participantId: a.participant_id, weight: a.share_weight || 1 }));
       if (!owners.length) owners = [{ participantId: item.added_by, weight: 1 }];
       for (const s of splitAmong(perItem[k], owners)) {
-        give(s.pid, line, s.amount, s.count > 1 ? `shared by ${s.count}` : "");
+        give(s.pid, line, s.amount, s.note);
       }
     });
   }

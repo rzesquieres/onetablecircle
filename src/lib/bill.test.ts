@@ -101,6 +101,25 @@ describe("computeBill", () => {
     expect(by).toEqual({ host: 3334, ana: 12500 + 3333, ben: 37500 + 3333 });
   });
 
+  it("splits a shared item by portions and says so in the breakdown (OTC-32)", () => {
+    const r = computeBill({
+      ...base,
+      assignees: [
+        ...assignees.filter((a) => a.order_item_id !== "nachos"),
+        { order_item_id: "nachos", participant_id: "host", share_weight: 1 },
+        { order_item_id: "nachos", participant_id: "ana", share_weight: 2 },
+      ],
+      lines: [line("nachos", 30001, { itemIds: ["nachos"] })],
+    });
+    const by = Object.fromEntries(r.shares.map((s) => [s.participantId, s]));
+    expect(by.host.items + by.ana.items).toBe(30001);
+    expect(by.ana.items).toBe(20001); // 2/3, gets the larger remainder
+    expect(by.host.items).toBe(10000);
+    expect(by.ben.items).toBe(0);
+    expect(by.ana.breakdown[0].note).toBe("2 of 3 portions");
+    expect(by.host.breakdown[0].note).toBe("1 of 3 portions");
+  });
+
   it("reports lines nobody pays for and over-sized discounts", () => {
     const r = computeBill({
       ...base,
