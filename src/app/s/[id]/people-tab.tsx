@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { QrCode } from "@/components/qr-code";
 import { Button, Card, Chip, Input, Label, Notice } from "@/components/ui";
+import { billIsPaid } from "@/lib/session-rules";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
 import { useUser } from "@/lib/use-user";
 import { timeOf, type TabProps } from "./tab-props";
@@ -63,6 +64,13 @@ export function PeopleTab({ data, me, isHost, ordersOpen, reload }: TabProps) {
     void reload();
   }
 
+  // OTC-31: the host, the person themselves, or whoever added them can mark a Senior/PWD ID.
+  const paid = billIsPaid(session, data.payments);
+  const canSetScPwd = (p: (typeof participants)[number]) => !paid && (isHost || p.id === me.id || p.added_by === me.id);
+  function setScPwd(p: (typeof participants)[number], kind: "senior" | "pwd") {
+    void run(getSupabase().rpc("set_sc_pwd", { p_participant_id: p.id, p_kind: p.sc_pwd === kind ? null : kind }));
+  }
+
   function addedLabel(p: (typeof participants)[number]) {
     if (p.is_host) return "Host";
     if (p.user_id) return `joined ${timeOf(p.joined_at)}`;
@@ -101,10 +109,15 @@ export function PeopleTab({ data, me, isHost, ordersOpen, reload }: TabProps) {
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-soft">At the table ({participants.length})</h2>
         <ul className="flex flex-col gap-1">
           {participants.map((p) => (
-            <li key={p.id} className="flex min-h-11 items-center justify-between rounded-xl px-1">
+            <li key={p.id} className="flex min-h-11 flex-wrap items-center justify-between gap-x-2 rounded-xl px-1">
               <span>
                 {p.display_name}
                 {p.id === me.id && <span className="text-ink-soft"> (you)</span>}
+                {p.sc_pwd && !canSetScPwd(p) && (
+                  <span className="ml-2 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand">
+                    {p.sc_pwd === "senior" ? "Senior" : "PWD"}
+                  </span>
+                )}
               </span>
               <span className="flex items-center gap-1 text-xs text-ink-soft">
                 {addedLabel(p)}
@@ -119,9 +132,24 @@ export function PeopleTab({ data, me, isHost, ordersOpen, reload }: TabProps) {
                   </Button>
                 )}
               </span>
+              {canSetScPwd(p) && (
+                <span className="flex w-full items-center gap-2 pb-1 text-xs text-ink-soft">
+                  ID discount:
+                  {(["senior", "pwd"] as const).map((kind) => (
+                    <Chip key={kind} selected={p.sc_pwd === kind} onClick={() => setScPwd(p, kind)} className="px-3">
+                      {kind === "senior" ? "Senior" : "PWD"}
+                    </Chip>
+                  ))}
+                </span>
+              )}
             </li>
           ))}
         </ul>
+        {participants.some((p) => p.sc_pwd) && (
+          <p className="mt-2 text-xs text-ink-soft">
+            Senior/PWD discounts go only to the person with the ID, on their own food. Show the ID to the staff.
+          </p>
+        )}
         <div className="mt-3">
           <SaveAsGroup data={data} me={me} />
         </div>

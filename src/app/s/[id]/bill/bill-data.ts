@@ -24,6 +24,7 @@ export function billFor(data: TableData): BillResult {
       tax: r?.tax_centavos ?? 0,
       discount: r?.discount_centavos ?? 0,
       tip: r?.tip_centavos ?? 0,
+      scPwdDiscount: r?.sc_pwd_discount_centavos ?? 0,
     },
   });
 }
@@ -36,6 +37,7 @@ export function sharesPayload(result: BillResult) {
     service_centavos: s.service,
     tax_centavos: s.tax,
     discount_centavos: s.discount,
+    sc_pwd_discount_centavos: s.scPwdDiscount,
     tip_centavos: s.tip,
     total_centavos: s.total,
     breakdown: s.breakdown,

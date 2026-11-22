@@ -136,7 +136,7 @@ Rules:
 - "lines": one entry per purchased item line, in printed order. "amount" is the line TOTAL (quantity × unit price) as digits only, e.g. "360.00". Include modifiers/add-ons that have their own price as separate lines. Skip lines with no price that only describe the item above.
 - Do NOT put these in "lines": subtotal, service charge, VAT/tax lines, discounts, totals, "amount due", cash tendered, change, card/GCash payment, VATable sales, VAT-exempt sales, zero-rated sales.
 - Philippine menu prices usually already include 12% VAT; the "VAT" or "VATable sales" lines are then only informational. Put tax in "tax_added" ONLY if it is added on top to reach the total. Otherwise null.
-- "service_charge": the service charge amount (often 10%). "discount": the total of all discounts (senior citizen, PWD, promos) as a positive number. "tip": only if a tip/gratuity is printed.
+- "service_charge": the service charge amount (often 10%). "senior_pwd_discount": the senior citizen and PWD discount as a positive number, INCLUDING the VAT deducted for it (e.g. "SC DISC 20%" plus a "LESS VAT" / "VAT exemption" deduction; the informational "VAT-exempt sales" amount is NOT a deduction); null if none. "discount": all OTHER discounts (promos, vouchers, loyalty) as a positive number; null if none. "tip": only if a tip/gratuity is printed.
 - "total": the final amount due as printed.
 - Copy numbers exactly; never guess. If something is blurry or cut off, leave it out and say so in "warnings". Mention in "warnings" if the lines plus charges don't add up to the printed total.`;
 

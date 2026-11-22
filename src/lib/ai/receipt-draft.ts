@@ -11,7 +11,7 @@ const nullableString = { anyOf: [{ type: "string" }, { type: "null" }] } as cons
 export const AI_RECEIPT_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["merchant", "lines", "service_charge", "tax_added", "discount", "tip", "total", "warnings"],
+  required: ["merchant", "lines", "service_charge", "tax_added", "discount", "senior_pwd_discount", "tip", "total", "warnings"],
   properties: {
     merchant: nullableString,
     lines: {
@@ -29,7 +29,11 @@ export const AI_RECEIPT_JSON_SCHEMA = {
     },
     service_charge: { ...nullableString, description: "Service charge amount, digits only" },
     tax_added: { ...nullableString, description: "Only tax ADDED on top of item prices; null if VAT is already included" },
-    discount: { ...nullableString, description: "Total discounts (senior/PWD, promos) as a positive number" },
+    discount: { ...nullableString, description: "Promo and other discounts (NOT senior/PWD) as a positive number" },
+    senior_pwd_discount: {
+      ...nullableString,
+      description: "Senior citizen / PWD discount as a positive number, including any VAT exemption on it",
+    },
     tip: nullableString,
     total: { ...nullableString, description: "Amount due printed on the receipt" },
     warnings: { type: "array", items: { type: "string" } },
@@ -42,6 +46,8 @@ export const AiReceiptSchema = z.object({
   service_charge: z.string().nullable(),
   tax_added: z.string().nullable(),
   discount: z.string().nullable(),
+  // Older or cached outputs may not have it.
+  senior_pwd_discount: z.string().nullable().optional(),
   tip: z.string().nullable(),
   total: z.string().nullable(),
   warnings: z.array(z.string()),
@@ -53,6 +59,7 @@ export interface ReceiptRows {
   service_charge_centavos: number;
   tax_centavos: number;
   discount_centavos: number;
+  sc_pwd_discount_centavos: number;
   tip_centavos: number;
   printed_total_centavos: number | null;
   warnings: string[];
@@ -84,6 +91,7 @@ export function toReceiptRows(r: AiReceipt): ReceiptRows {
     service_charge_centavos: cents(r.service_charge) ?? 0,
     tax_centavos: cents(r.tax_added) ?? 0,
     discount_centavos: cents(r.discount) ?? 0,
+    sc_pwd_discount_centavos: cents(r.senior_pwd_discount) ?? 0,
     tip_centavos: cents(r.tip) ?? 0,
     printed_total_centavos: cents(r.total),
     warnings,
@@ -91,14 +99,18 @@ export function toReceiptRows(r: AiReceipt): ReceiptRows {
 }
 
 /** What the lines and charges add up to (to compare with the printed total). */
-export function receiptTotal(r: Pick<ReceiptRows, "service_charge_centavos" | "tax_centavos" | "discount_centavos" | "tip_centavos"> & {
-  lines: { amount_centavos: number }[];
-}): number {
+export function receiptTotal(
+  r: Pick<ReceiptRows, "service_charge_centavos" | "tax_centavos" | "discount_centavos" | "tip_centavos"> & {
+    sc_pwd_discount_centavos?: number;
+    lines: { amount_centavos: number }[];
+  },
+): number {
   return (
     r.lines.reduce((a, l) => a + l.amount_centavos, 0) +
     r.service_charge_centavos +
     r.tax_centavos +
     r.tip_centavos -
-    r.discount_centavos
+    r.discount_centavos -
+    (r.sc_pwd_discount_centavos ?? 0)
   );
 }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ConfirmButton } from "@/components/confirm-button";
 import { Button, Card, Chip, Input, Label, Notice } from "@/components/ui";
-import { learnedPriceOff } from "@/lib/bill";
+import { learnedPriceOff, suggestedScPwdDiscount } from "@/lib/bill";
 import { optionsText } from "@/lib/consolidate";
 import { formatMoney, moneyInputText as pesoText, parseMoney } from "@/lib/money";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
@@ -106,7 +106,12 @@ export function ReceiptEditor({ data, me, reload }: TabProps) {
         </Button>
       </section>
 
-      <Charges data={data} run={run} itemsTotal={result.itemsTotal} />
+      <Charges
+        data={data}
+        run={run}
+        itemsTotal={result.itemsTotal}
+        suggestedScPwd={suggestedScPwdDiscount(result, data.participants)}
+      />
 
       <Card className="flex flex-col gap-1">
         <div className="flex justify-between text-lg font-semibold">
@@ -149,6 +154,7 @@ export function ReceiptEditor({ data, me, reload }: TabProps) {
                   {s.tax > 0 && <Row label="Tax" value={s.tax} />}
                   {s.tip > 0 && <Row label="Tip" value={s.tip} />}
                   {s.discount > 0 && <Row label="Discount" value={-s.discount} />}
+                  {s.scPwdDiscount > 0 && <Row label="Senior/PWD discount" value={-s.scPwdDiscount} />}
                 </ul>
               </details>
             </li>
@@ -357,18 +363,33 @@ function Charges({
   data,
   run,
   itemsTotal,
-}: Pick<TabProps, "data"> & { run: (a: PromiseLike<{ error: unknown }>) => Promise<void>; itemsTotal: number }) {
+  suggestedScPwd,
+}: Pick<TabProps, "data"> & {
+  run: (a: PromiseLike<{ error: unknown }>) => Promise<void>;
+  itemsTotal: number;
+  /** The legal Senior/PWD amount for the people marked in People (OTC-31). */
+  suggestedScPwd: number;
+}) {
   const r = data.receipt!;
   const [service, setService] = useState(pesoText(r.service_charge_centavos));
   const [tax, setTax] = useState(pesoText(r.tax_centavos));
   const [discount, setDiscount] = useState(pesoText(r.discount_centavos));
   const [tip, setTip] = useState(pesoText(r.tip_centavos));
+  const [scPwd, setScPwd] = useState(pesoText(r.sc_pwd_discount_centavos ?? 0));
+  const holders = data.participants.filter((p) => p.sc_pwd);
   const [bad, setBad] = useState("");
   const tenPct = Math.round((itemsTotal * data.session.service_charge_bps) / 10000);
 
-  function save(next?: Partial<Record<"service" | "tax" | "discount" | "tip", string>>) {
-    const v = { service, tax, discount, tip, ...next };
-    const c = { service: money(v.service), tax: money(v.tax), discount: money(v.discount), tip: money(v.tip) };
+  type Key = "service" | "tax" | "discount" | "tip" | "scPwd";
+  function save(next?: Partial<Record<Key, string>>) {
+    const v = { service, tax, discount, tip, scPwd, ...next };
+    const c = {
+      service: money(v.service),
+      tax: money(v.tax),
+      discount: money(v.discount),
+      tip: money(v.tip),
+      scPwd: money(v.scPwd),
+    };
     const wrong = Object.entries(c).find(([, x]) => x === null || x < 0);
     if (wrong) return setBad(wrong[0]);
     setBad("");
@@ -380,13 +401,14 @@ function Charges({
           tax_centavos: c.tax,
           discount_centavos: c.discount,
           tip_centavos: c.tip,
+          sc_pwd_discount_centavos: c.scPwd,
           updated_at: new Date().toISOString(),
         })
         .eq("id", r.id),
     );
   }
 
-  const field = (key: "service" | "tax" | "discount" | "tip", label: string, value: string, set: (s: string) => void, hint?: string) => (
+  const field = (key: Key, label: string, value: string, set: (s: string) => void, hint?: string) => (
     <div>
       <Label>{label}</Label>
       <Input inputMode="decimal" className={bad === key ? "border-danger" : ""} value={value} onChange={(e) => set(e.target.value)} onBlur={() => save()} />
@@ -399,9 +421,33 @@ function Charges({
       <p className="text-sm font-semibold">Charges (split by how much each person ordered)</p>
       <div className="grid grid-cols-2 gap-3">
         {field("service", "Service charge ₱", service, setService)}
-        {field("discount", "Discount ₱", discount, setDiscount, "Senior/PWD, promos")}
+        {field("discount", "Promo discount ₱", discount, setDiscount, "Not Senior/PWD")}
         {field("tax", "Tax added ₱", tax, setTax, "Only if not already in prices")}
         {field("tip", "Tip ₱", tip, setTip)}
+      </div>
+      <div className="flex flex-col gap-1 border-t border-line pt-3">
+        {field(
+          "scPwd",
+          "Senior/PWD discount ₱",
+          scPwd,
+          setScPwd,
+          holders.length
+            ? `Only for ${holders.map((p) => p.display_name).join(", ")}, on their own food. Include the VAT taken off.`
+            : "Mark who has a Senior or PWD ID in People first.",
+        )}
+        {holders.length > 0 && suggestedScPwd !== money(scPwd) && (
+          <Button
+            variant="ghost"
+            className="min-h-10 self-start px-0 text-sm text-brand"
+            onClick={() => {
+              const v = pesoText(suggestedScPwd);
+              setScPwd(v);
+              save({ scPwd: v });
+            }}
+          >
+            Work it out: VAT off, then 20% ({formatMoney(suggestedScPwd)})
+          </Button>
+        )}
       </div>
       {data.session.service_charge_bps > 0 && (
         <Button

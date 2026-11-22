@@ -122,6 +122,7 @@ export async function POST(request: NextRequest) {
           service_charge_centavos: rows.service_charge_centavos,
           tax_centavos: rows.tax_centavos,
           discount_centavos: rows.discount_centavos,
+          sc_pwd_discount_centavos: rows.sc_pwd_discount_centavos,
           tip_centavos: rows.tip_centavos,
           printed_total_centavos: rows.printed_total_centavos,
           ai_output: { ...ai, warnings: rows.warnings },
