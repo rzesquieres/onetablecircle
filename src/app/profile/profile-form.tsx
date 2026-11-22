@@ -254,6 +254,9 @@ function GroupCard({ group, run }: { group: GroupRow; run: (a: PromiseLike<{ err
           onConfirm={() => run(sb().from("saved_groups").delete().eq("id", group.id))}
         />
       </div>
+      <Link href={`/circles/${group.id}`} className="self-start text-sm font-medium text-brand">
+        See balances →
+      </Link>
       <ul className="flex flex-wrap gap-2">
         {members.map((m) => (
           <li key={m.id} className="flex min-h-10 items-center gap-1 rounded-full border border-line pl-3 text-sm">

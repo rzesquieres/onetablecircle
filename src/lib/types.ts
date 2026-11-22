@@ -14,6 +14,8 @@ export interface Session {
   closed_at: string | null;
   created_at: string;
   store_id: string | null;
+  /** The saved group (Circle) whose balances this table counts towards (OTC-34). */
+  saved_group_id?: string | null;
 }
 
 export interface Participant {

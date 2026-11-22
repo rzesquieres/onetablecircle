@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { QrCode } from "@/components/qr-code";
 import { Button, Card, Chip, Input, Label, Notice } from "@/components/ui";
@@ -236,6 +237,7 @@ export function PeopleTab({ data, me, isHost, ordersOpen, reload }: TabProps) {
         )}
         <div className="mt-3">
           <SaveAsGroup data={data} me={me} />
+          <CircleLink data={data} reload={reload} />
         </div>
         {canAddPeople && (
           <form onSubmit={addPerson} className="mt-3 flex gap-2">
@@ -384,5 +386,64 @@ function SaveAsGroup({ data, me }: Pick<TabProps, "data" | "me">) {
         {error && <Notice tone="error">{error}</Notice>}
       </form>
     </Card>
+  );
+}
+
+/**
+ * OTC-34: which Circle (saved group) this table counts towards for running
+ * balances. Shows the link; the group's owner can choose or change it.
+ */
+function CircleLink({ data, reload }: Pick<TabProps, "data" | "reload">) {
+  const { isGuest, loading, user } = useUser();
+  const [groups, setGroups] = useState<{ id: string; name: string }[] | null>(null);
+  const [error, setError] = useState("");
+  const linked = data.session.saved_group_id ?? null;
+
+  useEffect(() => {
+    if (loading || !user || isGuest) return;
+    getSupabase()
+      .from("saved_groups")
+      .select("id, name")
+      .order("name")
+      .then(({ data: rows }) => setGroups(rows ?? []));
+  }, [loading, user, isGuest]);
+
+  if (loading || !user || isGuest || !groups) return null;
+  const mineLinked = linked ? groups.find((g) => g.id === linked) : undefined;
+  // Linked to someone else's Circle: nothing for you to change here.
+  if (linked && !mineLinked) return null;
+  if (!linked && groups.length === 0) return null;
+
+  async function link(groupId: string) {
+    setError("");
+    const { error } = await getSupabase().rpc("set_table_circle", { p_session_id: data.session.id, p_group_id: groupId || null });
+    if (error) setError(friendlyError(error));
+    void reload();
+  }
+
+  return (
+    <div className="mt-3 flex flex-col gap-1">
+      <label className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-ink-soft">Count towards balances in</span>
+        <select
+          className="min-h-11 rounded-xl border border-line bg-surface px-2"
+          value={linked ?? ""}
+          onChange={(e) => void link(e.target.value)}
+        >
+          <option value="">No Circle</option>
+          {groups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+        </select>
+        {mineLinked && (
+          <Link href={`/circles/${mineLinked.id}`} className="font-medium text-brand">
+            Balances →
+          </Link>
+        )}
+      </label>
+      {error && <Notice tone="error">{error}</Notice>}
+    </div>
   );
 }
