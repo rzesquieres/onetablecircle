@@ -11,5 +11,8 @@ export async function GET() {
     builtAt: process.env.BUILT_AT ?? "unknown",
     node: process.version,
     time: new Date().toISOString(),
+  }, {
+    // Never cache: a CDN copy would show an old commit after a deploy.
+    headers: { "Cache-Control": "no-store, max-age=0", "CDN-Cache-Control": "no-store" },
   });
 }
