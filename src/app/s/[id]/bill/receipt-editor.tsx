@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ConfirmButton } from "@/components/confirm-button";
 import { Button, Card, Chip, Input, Label, Notice } from "@/components/ui";
-import { learnedPriceOff, suggestedScPwdDiscount } from "@/lib/bill";
+import { learnedPriceOff, suggestedScPwdDiscount, type ChargeSplit } from "@/lib/bill";
 import { optionsText } from "@/lib/consolidate";
 import { formatMoney, moneyInputText as pesoText, parseMoney } from "@/lib/money";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
@@ -416,15 +416,64 @@ function Charges({
     </div>
   );
 
+  // OTC-35: how service charge and tip are shared.
+  const setSplit = (key: "service_split" | "tip_split", value: ChargeSplit) =>
+    void run(getSupabase().from("receipts").update({ [key]: value, updated_at: new Date().toISOString() }).eq("id", r.id));
+  const quick = (label: string, amount: number, onPick: () => void) => (
+    <Chip key={label} selected={money(tip) === amount && amount > 0} onClick={onPick} className="px-3">
+      {label}
+    </Chip>
+  );
+
   return (
-    <Card className="flex flex-col gap-3">
-      <p className="text-sm font-semibold">Charges (split by how much each person ordered)</p>
-      <div className="grid grid-cols-2 gap-3">
+    <Card className="flex flex-col gap-4">
+      <p className="text-sm font-semibold">Charges</p>
+
+      <div className="flex flex-col gap-2">
         {field("service", "Service charge ₱", service, setService)}
-        {field("discount", "Promo discount ₱", discount, setDiscount, "Not Senior/PWD")}
-        {field("tax", "Tax added ₱", tax, setTax, "Only if not already in prices")}
-        {field("tip", "Tip ₱", tip, setTip)}
+        {data.session.service_charge_bps > 0 && money(service) !== tenPct && (
+          <Button
+            variant="ghost"
+            className="min-h-10 self-start px-0 text-sm text-brand"
+            onClick={() => {
+              const s = pesoText(tenPct);
+              setService(s);
+              save({ service: s });
+            }}
+          >
+            Use {data.session.service_charge_bps / 100}% of items ({formatMoney(tenPct)})
+          </Button>
+        )}
+        {money(service)! > 0 && (
+          <SplitToggle label="Service charge" value={r.service_split ?? "ordered"} onChange={(v) => setSplit("service_split", v)} />
+        )}
       </div>
+
+      <div className="flex flex-col gap-2 border-t border-line pt-3">
+        {field("tip", "Tip ₱ (optional)", tip, setTip)}
+        <div className="flex flex-wrap gap-2">
+          {[5, 10, 15].map((pct) => {
+            const amount = Math.round((itemsTotal * pct) / 100);
+            return quick(`${pct}% (${formatMoney(amount)})`, amount, () => {
+              const v = pesoText(amount);
+              setTip(v);
+              save({ tip: v });
+            });
+          })}
+          {money(tip)! > 0 &&
+            quick("No tip", -1, () => {
+              setTip("");
+              save({ tip: "" });
+            })}
+        </div>
+        {money(tip)! > 0 && <SplitToggle label="Tip" value={r.tip_split ?? "ordered"} onChange={(v) => setSplit("tip_split", v)} />}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 border-t border-line pt-3">
+        {field("discount", "Promo discount ₱", discount, setDiscount, "Not Senior/PWD. Split by what each ordered.")}
+        {field("tax", "Tax added ₱", tax, setTax, "Only if not already in prices")}
+      </div>
+
       <div className="flex flex-col gap-1 border-t border-line pt-3">
         {field(
           "scPwd",
@@ -449,19 +498,21 @@ function Charges({
           </Button>
         )}
       </div>
-      {data.session.service_charge_bps > 0 && (
-        <Button
-          variant="ghost"
-          className="min-h-10 self-start px-0 text-sm text-brand"
-          onClick={() => {
-            const s = pesoText(tenPct);
-            setService(s);
-            save({ service: s });
-          }}
-        >
-          Use {data.session.service_charge_bps / 100}% of items ({formatMoney(tenPct)})
-        </Button>
-      )}
     </Card>
+  );
+}
+
+/** "By what they ordered" or "Evenly" for one charge (OTC-35). */
+function SplitToggle({ label, value, onChange }: { label: string; value: ChargeSplit; onChange: (v: ChargeSplit) => void }) {
+  return (
+    <div role="group" aria-label={`How to split the ${label.toLowerCase()}`} className="flex flex-wrap items-center gap-2 text-xs text-ink-soft">
+      Split:
+      <Chip selected={value === "ordered"} onClick={() => onChange("ordered")} className="px-3">
+        By what they ordered
+      </Chip>
+      <Chip selected={value === "even"} onClick={() => onChange("even")} className="px-3">
+        Evenly
+      </Chip>
+    </div>
   );
 }

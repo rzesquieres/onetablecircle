@@ -25,6 +25,8 @@ export function billFor(data: TableData): BillResult {
       discount: r?.discount_centavos ?? 0,
       tip: r?.tip_centavos ?? 0,
       scPwdDiscount: r?.sc_pwd_discount_centavos ?? 0,
+      serviceSplit: r?.service_split ?? "ordered",
+      tipSplit: r?.tip_split ?? "ordered",
     },
   });
 }
