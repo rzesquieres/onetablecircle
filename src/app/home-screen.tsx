@@ -237,6 +237,11 @@ export function HomeScreen() {
               Admin
             </Link>
           )}
+          {!isGuest && (
+            <Link href="/circles" className="inline-flex min-h-11 items-center px-2 text-sm text-ink-soft">
+              Circles
+            </Link>
+          )}
           <Link href="/profile" className="inline-flex min-h-11 items-center px-2 text-sm text-ink-soft">
             Profile
           </Link>
