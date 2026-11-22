@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ConfirmButton } from "@/components/confirm-button";
 import { Button, Card, Chip, Input, Label, Notice } from "@/components/ui";
+import { learnedPriceOff } from "@/lib/bill";
 import { optionsText } from "@/lib/consolidate";
 import { formatMoney, moneyInputText as pesoText, parseMoney } from "@/lib/money";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
@@ -82,6 +83,7 @@ export function ReceiptEditor({ data, me, reload }: TabProps) {
         <p className="text-sm text-ink-soft">
           Check each line against the receipt, and who pays for it. Lines matched to ordered items are split the same way
           as the order.
+          {data.session.store_id && " When you send the bill, your matches are remembered for this restaurant's next receipts."}
         </p>
         {data.lines.map((line) => (
           <LineCard key={line.id} line={line} props={{ data, me, reload }} run={run} />
@@ -229,7 +231,11 @@ function LineCard({
   const [bad, setBad] = useState(false);
   const sb = () => getSupabase();
 
-  const matched = data.lineItems.filter((x) => x.receipt_line_id === line.id).map((x) => x.order_item_id);
+  const lineLinks = data.lineItems.filter((x) => x.receipt_line_id === line.id);
+  const matched = lineLinks.map((x) => x.order_item_id);
+  const learnedIds = new Set(lineLinks.filter((x) => x.source === "learned").map((x) => x.order_item_id));
+  const learnedItems = data.items.filter((i) => learnedIds.has(i.id));
+  const priceOff = learnedItems.length > 0 && learnedPriceOff(line.amount_centavos, learnedItems);
   const people = data.linePeople.filter((x) => x.receipt_line_id === line.id).map((x) => x.participant_id);
   const elsewhere = new Set(data.lineItems.filter((x) => x.receipt_line_id !== line.id).map((x) => x.order_item_id));
   const label = (id: string) => {
@@ -275,7 +281,14 @@ function LineCard({
         <div className="flex flex-col gap-2">
           {matched.map((id) => (
             <div key={id} className="flex items-center justify-between gap-2 rounded-xl bg-muted px-3 py-2 text-sm">
-              <span className="min-w-0">{label(id)}</span>
+              <span className="min-w-0">
+                {label(id)}
+                {learnedIds.has(id) && (
+                  <span className="ml-2 inline-block rounded-full border border-line px-2 text-xs text-ink-soft" title="Matched the way this receipt line was matched before at this restaurant">
+                    Learned
+                  </span>
+                )}
+              </span>
               <button
                 className="min-h-9 shrink-0 px-2 text-ink-soft"
                 aria-label="Unmatch"
@@ -285,6 +298,11 @@ function LineCard({
               </button>
             </div>
           ))}
+          {priceOff && (
+            <p className="text-xs font-semibold text-warn">
+              Matched from earlier receipts, but the price is quite different from the order. Check it&apos;s the right item.
+            </p>
+          )}
           <select
             className="min-h-11 rounded-xl border border-line bg-surface px-3 text-sm"
             value=""

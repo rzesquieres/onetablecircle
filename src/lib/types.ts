@@ -165,6 +165,8 @@ export interface ReceiptLineItem {
   receipt_line_id: string;
   order_item_id: string;
   session_id: string;
+  /** How the match was made: by the host, guessed by name, or learned from earlier receipts at the store (OTC-29). */
+  source: "manual" | "auto" | "learned";
 }
 
 export interface ReceiptLinePerson {
