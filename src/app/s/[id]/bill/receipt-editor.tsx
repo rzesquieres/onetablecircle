@@ -10,7 +10,7 @@ import { formatMoney, moneyInputText as pesoText, parseMoney } from "@/lib/money
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
 import type { LineSplit, ReceiptLine } from "@/lib/types";
 import { nameOf, type TabProps } from "../tab-props";
-import { billFor, sharesPayload } from "./bill-data";
+import { adjustmentRows, billFor, sharesPayload } from "./bill-data";
 
 const money = (text: string) => (text.trim() ? parseMoney(text) : 0);
 
@@ -155,6 +155,9 @@ export function ReceiptEditor({ data, me, reload }: TabProps) {
                   {s.tip > 0 && <Row label="Tip" value={s.tip} />}
                   {s.discount > 0 && <Row label="Discount" value={-s.discount} />}
                   {s.scPwdDiscount > 0 && <Row label="Senior/PWD discount" value={-s.scPwdDiscount} />}
+                  {adjustmentRows(s.adjustments, (pid) => nameOf(data, pid)).map((row, k) => (
+                    <Row key={`adj-${k}`} label={row.label} value={row.value} />
+                  ))}
                 </ul>
               </details>
             </li>

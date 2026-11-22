@@ -71,6 +71,20 @@ export function PeopleTab({ data, me, isHost, ordersOpen, reload }: TabProps) {
     void run(getSupabase().rpc("set_sc_pwd", { p_participant_id: p.id, p_kind: p.sc_pwd === kind ? null : kind }));
   }
 
+  // OTC-33: "libre" (someone covers another person's share) and celebrant mode.
+  const nameFor = (id: string | null | undefined) =>
+    id === me.id ? "you" : participants.find((x) => x.id === id)?.display_name ?? "someone";
+  const iCover = participants.filter((p) => p.covered_by === me.id);
+  const meCelebrating = Boolean(me.is_celebrant || participants.find((p) => p.id === me.id)?.is_celebrant);
+  const canTreat = !paid && !meCelebrating;
+  const treatable = participants.filter(
+    (p) => p.id !== me.id && !p.is_celebrant && (isHost || !p.covered_by || p.covered_by === me.id),
+  );
+  const cover = (ids: string[], payer: string | null) =>
+    ids.length ? run(getSupabase().rpc("set_covered_by", { p_participant_ids: ids, p_payer: payer })) : undefined;
+  const celebrate = (p: (typeof participants)[number]) =>
+    run(getSupabase().rpc("set_celebrant", { p_participant_id: p.id, p_on: !p.is_celebrant }));
+
   function addedLabel(p: (typeof participants)[number]) {
     if (p.is_host) return "Host";
     if (p.user_id) return `joined ${timeOf(p.joined_at)}`;
@@ -118,6 +132,12 @@ export function PeopleTab({ data, me, isHost, ordersOpen, reload }: TabProps) {
                     {p.sc_pwd === "senior" ? "Senior" : "PWD"}
                   </span>
                 )}
+                {p.is_celebrant && (
+                  <span className="ml-2 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand">🎂 Celebrant</span>
+                )}
+                {p.covered_by && !p.is_celebrant && (
+                  <span className="ml-2 text-xs text-ink-soft">covered by {nameFor(p.covered_by)}</span>
+                )}
               </span>
               <span className="flex items-center gap-1 text-xs text-ink-soft">
                 {addedLabel(p)}
@@ -142,9 +162,73 @@ export function PeopleTab({ data, me, isHost, ordersOpen, reload }: TabProps) {
                   ))}
                 </span>
               )}
+              {!paid && p.id !== me.id && (isHost || (canTreat && !p.is_celebrant)) && (
+                <span className="flex w-full flex-wrap items-center gap-2 pb-1 text-xs text-ink-soft">
+                  {isHost && (
+                    <Chip selected={Boolean(p.is_celebrant)} onClick={() => void celebrate(p)} className="px-3">
+                      🎂 Celebrant
+                    </Chip>
+                  )}
+                  {isHost && !p.is_celebrant ? (
+                    <label className="flex min-h-11 items-center gap-1">
+                      Paid by
+                      <select
+                        className="min-h-11 rounded-xl border border-line bg-surface px-2 text-sm text-ink"
+                        value={p.covered_by ?? ""}
+                        onChange={(e) => void cover([p.id], e.target.value || null)}
+                      >
+                        <option value="">themselves</option>
+                        {participants
+                          .filter((x) => x.id !== p.id && !x.is_celebrant)
+                          .map((x) => (
+                            <option key={x.id} value={x.id}>
+                              {x.id === me.id ? "me" : x.display_name}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  ) : (
+                    !p.is_celebrant &&
+                    canTreat &&
+                    (!p.covered_by || p.covered_by === me.id) && (
+                      <Chip
+                        selected={p.covered_by === me.id}
+                        onClick={() => void cover([p.id], p.covered_by === me.id ? null : me.id)}
+                        className="px-3"
+                      >
+                        {p.covered_by === me.id ? "You're covering ✓" : "I'll cover them"}
+                      </Chip>
+                    )
+                  )}
+                </span>
+              )}
             </li>
           ))}
         </ul>
+        {canTreat && participants.length > 1 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {treatable.some((p) => p.covered_by !== me.id) && (
+              <Button
+                variant="secondary"
+                className="min-h-11 px-3 text-sm"
+                onClick={() => void cover(treatable.filter((p) => p.covered_by !== me.id).map((p) => p.id), me.id)}
+              >
+                Libre ko! Treat everyone
+              </Button>
+            )}
+            {iCover.length > 0 && (
+              <Button variant="ghost" className="min-h-11 px-3 text-sm" onClick={() => void cover(iCover.map((p) => p.id), null)}>
+                Stop covering ({iCover.length})
+              </Button>
+            )}
+          </div>
+        )}
+        {participants.some((p) => p.is_celebrant || p.covered_by) && (
+          <p className="mt-2 text-xs text-ink-soft">
+            A celebrant&apos;s share is split evenly between everyone else. Whoever covers someone pays their whole share, including
+            service charge.
+          </p>
+        )}
         {participants.some((p) => p.sc_pwd) && (
           <p className="mt-2 text-xs text-ink-soft">
             Senior/PWD discounts go only to the person with the ID, on their own food. Show the ID to the staff.

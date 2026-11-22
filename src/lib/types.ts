@@ -27,6 +27,10 @@ export interface Participant {
   added_by: string | null;
   /** Has a Senior Citizen or PWD ID for this table (OTC-31). */
   sc_pwd?: "senior" | "pwd" | null;
+  /** Who pays this person's share ("libre"); null = themselves (OTC-33). */
+  covered_by?: string | null;
+  /** Their share is spread evenly across everyone else (OTC-33). */
+  is_celebrant?: boolean;
 }
 
 export interface OrderItem {
@@ -192,6 +196,9 @@ export interface BillShareRow {
   discount_centavos: number;
   sc_pwd_discount_centavos?: number;
   tip_centavos: number;
+  covered_centavos?: number;
+  covering_centavos?: number;
+  adjustments?: { participantId: string; amount: number; kind: "treat" | "celebrant"; direction: "in" | "out" }[];
   total_centavos: number;
   breakdown: { lineId: string; description: string; amount: number; note: string }[];
 }
