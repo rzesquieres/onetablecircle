@@ -25,6 +25,8 @@ export interface Participant {
   joined_at: string;
   /** Who added this person by name (people without a phone); null for people who joined themselves. */
   added_by: string | null;
+  /** Has a Senior Citizen or PWD ID for this table (OTC-31). */
+  sc_pwd?: "senior" | "pwd" | null;
 }
 
 export interface OrderItem {
@@ -141,6 +143,8 @@ export interface Receipt {
   service_charge_centavos: number;
   tax_centavos: number;
   discount_centavos: number;
+  /** Senior/PWD discount, only for people marked Senior or PWD (OTC-31). */
+  sc_pwd_discount_centavos?: number;
   tip_centavos: number;
   printed_total_centavos: number | null;
   ai_output: { merchant?: string | null; warnings?: string[] } | null;
@@ -183,6 +187,7 @@ export interface BillShareRow {
   service_centavos: number;
   tax_centavos: number;
   discount_centavos: number;
+  sc_pwd_discount_centavos?: number;
   tip_centavos: number;
   total_centavos: number;
   breakdown: { lineId: string; description: string; amount: number; note: string }[];

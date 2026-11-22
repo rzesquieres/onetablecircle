@@ -14,6 +14,7 @@ describe("toReceiptRows", () => {
       service_charge: "161.05",
       tax_added: null,
       discount: "-50",
+      senior_pwd_discount: "₱85.71",
       tip: null,
       total: "1,721.55",
       warnings: [],
@@ -27,9 +28,10 @@ describe("toReceiptRows", () => {
       service_charge_centavos: 16105,
       tax_centavos: 0,
       discount_centavos: 5000,
+      sc_pwd_discount_centavos: 8571,
       tip_centavos: 0,
       printed_total_centavos: 172155,
     });
-    expect(receiptTotal(rows)).toBe(36000 + 125050 + 16105 - 5000);
+    expect(receiptTotal(rows)).toBe(36000 + 125050 + 16105 - 5000 - 8571);
   });
 });

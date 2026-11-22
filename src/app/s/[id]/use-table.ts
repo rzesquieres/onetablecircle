@@ -88,6 +88,7 @@ export function useTable(sessionId: string) {
           "service_charge_centavos",
           "tax_centavos",
           "discount_centavos",
+          "sc_pwd_discount_centavos",
           "tip_centavos",
           "printed_total_centavos",
         ])[0] as unknown as Receipt)
@@ -107,6 +108,7 @@ export function useTable(sessionId: string) {
         "service_centavos",
         "tax_centavos",
         "discount_centavos",
+        "sc_pwd_discount_centavos",
         "tip_centavos",
         "total_centavos",
       ]) as unknown as BillShareRow[],

@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { allocate, computeBill, similarity, suggestMatches, type BillInput, type BillLine } from "./bill";
+import {
+  allocate,
+  computeBill,
+  scPwdDiscountFor,
+  similarity,
+  suggestedScPwdDiscount,
+  suggestMatches,
+  type BillInput,
+  type BillLine,
+} from "./bill";
 
 describe("allocate", () => {
   it("always adds up exactly", () => {
@@ -118,6 +127,56 @@ describe("computeBill", () => {
     expect(by.ben.items).toBe(0);
     expect(by.ana.breakdown[0].note).toBe("2 of 3 portions");
     expect(by.host.breakdown[0].note).toBe("1 of 3 portions");
+  });
+
+  describe("Senior/PWD discount (OTC-31)", () => {
+    const lines = [
+      line("latte", 20000, { itemIds: ["latte"] }), // Ana
+      line("nachos", 30000, { itemIds: ["nachos"] }), // host, Ana, Ben
+      line("beer", 27000, { itemIds: ["beer", "beer2"] }), // Ben 2, host 1
+    ];
+
+    it("works out VAT exemption then 20% off", () => {
+      expect(scPwdDiscountFor(112000)).toBe(32000); // ₱1,120 -> ₱800
+      expect(scPwdDiscountFor(100)).toBe(29); // ₱1.00 -> 0.89 ex-VAT -> 0.71
+      expect(scPwdDiscountFor(0)).toBe(0);
+      expect(scPwdDiscountFor(10000, false)).toBe(2000); // no VAT in prices: just 20%
+      expect(() => scPwdDiscountFor(-1)).toThrow();
+    });
+
+    it("goes only to the cardholder; everyone else's share is unchanged", () => {
+      const plain = computeBill({ ...base, lines, charges: { service: 7700, tax: 0, discount: 0, tip: 0 } });
+      const withSenior = computeBill({
+        ...base,
+        participants: people.map((p) => (p.id === "ana" ? { ...p, sc_pwd: "senior" as const } : p)),
+        lines,
+        charges: { service: 7700, tax: 0, discount: 0, tip: 0, scPwdDiscount: 8571 },
+      });
+      expect(withSenior.problems).toEqual([]);
+      const by = (r: typeof plain) => Object.fromEntries(r.shares.map((s) => [s.participantId, s]));
+      expect(by(withSenior).ana.scPwdDiscount).toBe(8571);
+      expect(by(withSenior).ana.total).toBe(by(plain).ana.total - 8571);
+      expect(by(withSenior).host.total).toBe(by(plain).host.total);
+      expect(by(withSenior).ben.total).toBe(by(plain).ben.total);
+      expect(withSenior.total).toBe(plain.total - 8571);
+      expect(sum(withSenior.shares.map((s) => s.total))).toBe(withSenior.total);
+    });
+
+    it("splits between several cardholders by their own food, and suggests the amount", () => {
+      const ps = people.map((p) => (p.id === "host" ? p : { ...p, sc_pwd: (p.id === "ana" ? "senior" : "pwd") as "senior" | "pwd" }));
+      const first = computeBill({ ...base, participants: ps, lines });
+      // Ana ate 300.00, Ben 280.00 -> 85.71 + 80.00
+      expect(suggestedScPwdDiscount(first, ps)).toBe(scPwdDiscountFor(30000) + scPwdDiscountFor(28000));
+      expect(suggestedScPwdDiscount(first, ps)).toBe(8571 + 8000);
+      const r = computeBill({ ...base, participants: ps, lines, charges: { service: 0, tax: 0, discount: 0, tip: 0, scPwdDiscount: 16571 } });
+      const by = Object.fromEntries(r.shares.map((s) => [s.participantId, s.scPwdDiscount]));
+      expect(by).toEqual({ host: 0, ana: 8571, ben: 8000 });
+    });
+
+    it("flags a Senior/PWD discount when nobody is marked", () => {
+      const r = computeBill({ ...base, lines, charges: { service: 0, tax: 0, discount: 0, tip: 0, scPwdDiscount: 500 } });
+      expect(r.problems).toEqual(["Mark who has a Senior or PWD ID in People, or remove the Senior/PWD discount"]);
+    });
   });
 
   it("reports lines nobody pays for and over-sized discounts", () => {

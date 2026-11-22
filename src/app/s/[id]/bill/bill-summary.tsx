@@ -171,6 +171,9 @@ function MyShare({ share, isHost }: { share: BillShareRow; isHost: boolean }) {
         {share.tax_centavos > 0 && <Line label="Tax" value={share.tax_centavos} />}
         {share.tip_centavos > 0 && <Line label="Tip" value={share.tip_centavos} />}
         {share.discount_centavos > 0 && <Line label="Discount" value={-share.discount_centavos} />}
+        {(share.sc_pwd_discount_centavos ?? 0) > 0 && (
+          <Line label="Senior/PWD discount" value={-(share.sc_pwd_discount_centavos ?? 0)} />
+        )}
       </ul>
     </Card>
   );

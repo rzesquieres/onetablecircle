@@ -56,8 +56,11 @@ export interface BillLine {
 export interface BillCharges {
   service: number;
   tax: number;
+  /** Promos and other discounts, shared by everyone in proportion to their food. */
   discount: number;
   tip: number;
+  /** Senior/PWD discount (VAT exemption + 20%), only for people marked Senior or PWD (OTC-31). */
+  scPwdDiscount?: number;
 }
 
 export interface BreakdownLine {
@@ -74,6 +77,7 @@ export interface Share {
   service: number;
   tax: number;
   discount: number;
+  scPwdDiscount: number;
   tip: number;
   total: number;
   breakdown: BreakdownLine[];
@@ -88,7 +92,7 @@ export interface BillResult {
 }
 
 export interface BillInput {
-  participants: Pick<Participant, "id" | "joined_at">[];
+  participants: (Pick<Participant, "id" | "joined_at"> & { sc_pwd?: Participant["sc_pwd"] })[];
   items: Pick<OrderItem, "id" | "quantity" | "created_at" | "added_by">[];
   assignees: Pick<Assignee, "order_item_id" | "participant_id" | "share_weight">[];
   lines: BillLine[];
@@ -107,6 +111,7 @@ export function computeBill(input: BillInput): BillResult {
     service: 0,
     tax: 0,
     discount: 0,
+    scPwdDiscount: 0,
     tip: 0,
     total: 0,
     breakdown: [],
@@ -179,7 +184,8 @@ export function computeBill(input: BillInput): BillResult {
   }
 
   const { service, tax, discount, tip } = input.charges;
-  if (discount > itemsTotal + service + tax + tip) problems.push("The discount is bigger than the bill");
+  const scPwd = input.charges.scPwdDiscount ?? 0;
+  if (discount + scPwd > itemsTotal + service + tax + tip) problems.push("The discount is bigger than the bill");
 
   // Charges follow each person's share of the food (equal split if nobody has any).
   const weights = shares.map((s) => s.items);
@@ -194,12 +200,52 @@ export function computeBill(input: BillInput): BillResult {
   addCharge("discount", discount);
   addCharge("tip", tip);
 
+  // Senior/PWD discount: only the cardholders, in proportion to their own food.
+  if (scPwd > 0) {
+    const holders = people.map((p, i) => ({ p, i })).filter(({ p }) => p.sc_pwd);
+    if (!holders.length) {
+      problems.push("Mark who has a Senior or PWD ID in People, or remove the Senior/PWD discount");
+    } else {
+      allocate(scPwd, holders.map(({ i }) => shares[i].items)).forEach((v, k) => {
+        shares[holders[k].i].scPwdDiscount = v;
+      });
+    }
+  }
+
   for (const s of shares) {
-    s.total = s.items + s.service + s.tax + s.tip - s.discount;
+    s.total = s.items + s.service + s.tax + s.tip - s.discount - s.scPwdDiscount;
     if (s.total < 0) problems.push("A discount is bigger than someone's share");
   }
 
-  return { shares, itemsTotal, total: itemsTotal + service + tax + tip - discount, problems: [...new Set(problems)] };
+  const total = itemsTotal + service + tax + tip - discount - shares.reduce((a, s) => a + s.scPwdDiscount, 0);
+  return { shares, itemsTotal, total, problems: [...new Set(problems)] };
+}
+
+// ---------- Senior / PWD discount (OTC-31) ----------
+
+/** VAT rate built into Philippine menu prices, in basis points (12%). */
+export const PH_VAT_BPS = 1200;
+
+/**
+ * The Senior/PWD discount on `amount` centavos of a cardholder's food:
+ * remove VAT (if prices include it), then take 20% off what's left.
+ * Returns the whole reduction (VAT exemption + 20%), rounded to the centavo.
+ */
+export function scPwdDiscountFor(amount: number, vatInclusive = true): number {
+  if (!Number.isSafeInteger(amount) || amount < 0) throw new RangeError(`Bad amount ${amount}`);
+  // Integer rounding (half up) so there are no float errors.
+  const exVat = vatInclusive ? Math.floor((amount * 20000 + (10000 + PH_VAT_BPS)) / (2 * (10000 + PH_VAT_BPS))) : amount;
+  const twenty = Math.floor((exVat * 2 + 5) / 10);
+  return amount - exVat + twenty;
+}
+
+/**
+ * What the Senior/PWD discount should be for this bill: the formula applied to
+ * each cardholder's share of the food. Use it when the receipt doesn't show one.
+ */
+export function suggestedScPwdDiscount(result: BillResult, participants: { id: string; sc_pwd?: string | null }[], vatInclusive = true): number {
+  const holders = new Set(participants.filter((p) => p.sc_pwd).map((p) => p.id));
+  return result.shares.filter((s) => holders.has(s.participantId)).reduce((a, s) => a + scPwdDiscountFor(s.items, vatInclusive), 0);
 }
 
 // ---------- Matching receipt lines to ordered items ----------
