@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { ConfirmButton } from "@/components/confirm-button";
 import { Button, Card, Notice } from "@/components/ui";
 import { publicStorageUrl } from "@/lib/menu";
@@ -9,6 +9,7 @@ import { friendlyError, getSupabase } from "@/lib/supabase/client";
 import { SUPABASE_URL } from "@/lib/supabase/env";
 import type { BillShareRow } from "@/lib/types";
 import { nameOf, type TabProps } from "../tab-props";
+import { AccountPrompt } from "./account-prompt";
 import { adjustmentRows } from "./bill-data";
 import { RatingPrompt } from "./rating-prompt";
 
@@ -16,6 +17,9 @@ export function BillSummary({ data, me, isHost, reload }: TabProps) {
   const receipt = data.receipt!;
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
+  // OTC-36: the "create an account" prompt waits until the rating prompt is done.
+  const [ratingDone, setRatingDone] = useState(false);
+  const onRatingDone = useCallback(() => setRatingDone(true), []);
   const mine = data.shares.find((s) => s.participant_id === me.id);
   const host = data.participants.find((p) => p.is_host);
   const qrUrl = publicStorageUrl(SUPABASE_URL, "payment-qr", receipt.payment_qr_path);
@@ -61,7 +65,8 @@ export function BillSummary({ data, me, isHost, reload }: TabProps) {
         </Card>
       )}
 
-      <RatingPrompt sessionId={data.session.id} />
+      <RatingPrompt sessionId={data.session.id} onDone={onRatingDone} />
+      {ratingDone && Boolean(me.user_id) && <AccountPrompt sessionId={data.session.id} />}
 
       <section className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between">
