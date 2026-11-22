@@ -61,7 +61,13 @@ export interface BillCharges {
   tip: number;
   /** Senior/PWD discount (VAT exemption + 20%), only for people marked Senior or PWD (OTC-31). */
   scPwdDiscount?: number;
+  /** How service charge and tip are shared (OTC-35). Default: by food after Senior/PWD discount. */
+  serviceSplit?: ChargeSplit;
+  tipSplit?: ChargeSplit;
 }
+
+/** "ordered": in proportion to each person's food; "even": the same for everyone who had something. */
+export type ChargeSplit = "ordered" | "even";
 
 export interface BreakdownLine {
   lineId: string;
@@ -187,20 +193,7 @@ export function computeBill(input: BillInput): BillResult {
   const scPwd = input.charges.scPwdDiscount ?? 0;
   if (discount + scPwd > itemsTotal + service + tax + tip) problems.push("The discount is bigger than the bill");
 
-  // Charges follow each person's share of the food (equal split if nobody has any).
-  const weights = shares.map((s) => s.items);
-  const addCharge = (key: "service" | "tax" | "discount" | "tip", amount: number) => {
-    if (!amount || !shares.length) return;
-    allocate(amount, weights).forEach((v, i) => {
-      shares[i][key] = v;
-    });
-  };
-  addCharge("service", service);
-  addCharge("tax", tax);
-  addCharge("discount", discount);
-  addCharge("tip", tip);
-
-  // Senior/PWD discount: only the cardholders, in proportion to their own food.
+  // Senior/PWD discount first: only the cardholders, in proportion to their own food.
   if (scPwd > 0) {
     const holders = people.map((p, i) => ({ p, i })).filter(({ p }) => p.sc_pwd);
     if (!holders.length) {
@@ -211,6 +204,24 @@ export function computeBill(input: BillInput): BillResult {
       });
     }
   }
+
+  // Tax and promo discounts follow each person's share of the food (equal split if nobody has any).
+  const gross = shares.map((s) => s.items);
+  // Service charge and tip (OTC-35): by food after the Senior/PWD discount, or evenly
+  // between everyone who had something (everyone, if nobody has anything yet).
+  const net = shares.map((s) => Math.max(0, s.items - s.scPwdDiscount));
+  const ate = shares.map((s) => (s.items > 0 ? 1 : 0));
+  const evenly = ate.some(Boolean) ? ate : shares.map(() => 1);
+  const addCharge = (key: "service" | "tax" | "discount" | "tip", amount: number, weights: number[]) => {
+    if (!amount || !shares.length) return;
+    allocate(amount, weights).forEach((v, i) => {
+      shares[i][key] = v;
+    });
+  };
+  addCharge("service", service, input.charges.serviceSplit === "even" ? evenly : net);
+  addCharge("tax", tax, gross);
+  addCharge("discount", discount, gross);
+  addCharge("tip", tip, input.charges.tipSplit === "even" ? evenly : net);
 
   for (const s of shares) {
     s.total = s.items + s.service + s.tax + s.tip - s.discount - s.scPwdDiscount;

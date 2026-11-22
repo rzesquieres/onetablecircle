@@ -145,6 +145,9 @@ export interface Receipt {
   discount_centavos: number;
   /** Senior/PWD discount, only for people marked Senior or PWD (OTC-31). */
   sc_pwd_discount_centavos?: number;
+  /** How service charge and tip are shared (OTC-35). */
+  service_split?: "ordered" | "even";
+  tip_split?: "ordered" | "even";
   tip_centavos: number;
   printed_total_centavos: number | null;
   ai_output: { merchant?: string | null; warnings?: string[] } | null;
