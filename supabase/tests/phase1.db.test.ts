@@ -259,7 +259,7 @@ describe("ordering", () => {
 
     it("quantity cannot be reduced below what was served", async () => {
       await expect(
-        as(FRIEND, () => db.query("update public.order_items set quantity = 1 where id = $1", [latteId])),
+        as(FRIEND, () => db.query("select public.edit_order_item($1, 1, '', null)", [latteId])),
       ).rejects.toThrow(/already served/);
     });
   });

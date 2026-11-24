@@ -8,7 +8,7 @@ import { friendlyError, getSupabase } from "@/lib/supabase/client";
 import { canRemoveItem } from "@/lib/session-rules";
 import { FreeTextForm } from "./free-text-form";
 import { MenuPicker } from "./menu-picker";
-import { ShareEditor } from "./share-editor";
+import { ItemEditor } from "./item-editor";
 import { nameOf, type TabProps } from "./tab-props";
 
 export function OrderTab(props: TabProps) {
@@ -17,7 +17,7 @@ export function OrderTab(props: TabProps) {
   const [error, setError] = useState("");
   // Two taps to remove: the first arms the button, the second deletes.
   const [confirmId, setConfirmId] = useState<string | null>(null);
-  // OTC-32: the item whose sharing is being edited.
+  // OTC-27/32: the item being edited (quantity, notes, sharing).
   const [editingId, setEditingId] = useState<string | null>(null);
   const currency = data.session.currency;
   const hasStore = Boolean(data.session.store_id);
@@ -109,7 +109,7 @@ export function OrderTab(props: TabProps) {
                             setEditingId(item.id);
                           }}
                         >
-                          {item.is_shared ? "Edit sharing" : "Share"}
+                          Edit
                         </Button>
                       )}
                       {canEdit(item.added_by) &&
@@ -139,7 +139,7 @@ export function OrderTab(props: TabProps) {
                     </div>
                     </div>
                     {editing && (
-                      <ShareEditor
+                      <ItemEditor
                         item={item}
                         data={data}
                         meId={me.id}
