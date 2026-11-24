@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { ShareSite } from "@/components/share-site";
 import { YouTubeEmbed } from "@/components/youtube-embed";
 import { allocate } from "@/lib/bill";
 import { INTRO_VIDEO } from "@/lib/youtube";
@@ -242,6 +243,18 @@ export function Landing({ joinForm }: { joinForm: ReactNode }) {
           </p>
         </div>
         <SettledBill />
+      </section>
+
+      <section className="border-t border-line bg-surface">
+        <div className="mx-auto grid w-full max-w-5xl items-center gap-8 px-4 py-12 md:grid-cols-2 md:gap-12 md:px-8 md:py-16">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight md:text-3xl">Bring your group</h2>
+            <p className="mt-3 max-w-[38ch] text-ink-soft">
+              Let friends scan the code to open OneTableCircle on their phones, or send them the link.
+            </p>
+          </div>
+          <ShareSite />
+        </div>
       </section>
     </div>
   );

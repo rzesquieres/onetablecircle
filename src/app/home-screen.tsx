@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Notifications } from "@/components/notifications";
+import { ShareSite } from "@/components/share-site";
 import { Button, Card, Input, Notice, Spinner } from "@/components/ui";
 import { formatMoney } from "@/lib/money";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
@@ -294,6 +295,16 @@ export function HomeScreen() {
             ))}
           </ul>
         )}
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-soft">Invite friends</h2>
+        <Card className="flex flex-col gap-3">
+          <p className="text-sm text-ink-soft">
+            Let friends scan the code to open OneTableCircle on their phones, or send them the link.
+          </p>
+          <ShareSite size={160} />
+        </Card>
       </section>
     </div>
     </Shell>
