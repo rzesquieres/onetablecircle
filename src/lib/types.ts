@@ -226,7 +226,7 @@ export interface AppNotification {
   id: string;
   user_id: string;
   session_id: string | null;
-  kind: "order_removed";
+  kind: "order_removed" | "order_changed" | "order_edited";
   body: string;
   created_at: string;
   read_at: string | null;

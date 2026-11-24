@@ -70,14 +70,14 @@ describe("adding someone without a phone", () => {
   });
 
   it("only the guest who added the items can edit them, not other guests", async () => {
-    const other = await as(db, OTHER_GUEST, () =>
-      db.query("update public.order_items set quantity = 2 where name = 'Sinigang' returning id"),
-    );
-    expect(other.rows).toHaveLength(0);
-    const mine = await as(db, GUEST, () =>
-      db.query("update public.order_items set quantity = 2 where name = 'Sinigang' returning id"),
-    );
-    expect(mine.rows).toHaveLength(1);
+    // OTC-27: edits go through edit_order_item(); direct updates are revoked.
+    const { id } = (await db.query<{ id: string }>("select id from public.order_items where name = 'Sinigang'")).rows[0];
+    const edit = (actor: string | typeof GUEST) =>
+      as(db, actor, () => db.query("select public.edit_order_item($1, 2, '', null)", [id]));
+    await expect(edit(OTHER_GUEST)).rejects.toThrow(/Only the person who ordered it/);
+    await edit(GUEST);
+    const { quantity } = (await db.query<{ quantity: number }>("select quantity from public.order_items where id = $1", [id])).rows[0];
+    expect(quantity).toBe(2);
   });
 
   it("someone who is not at the table cannot add people", async () => {

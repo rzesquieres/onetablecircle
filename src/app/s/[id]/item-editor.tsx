@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Chip, Label, Notice } from "@/components/ui";
+import { Button, Chip, Input, Label, Notice } from "@/components/ui";
 import { allocate } from "@/lib/bill";
 import { formatMoney } from "@/lib/money";
 import { friendlyError, getSupabase } from "@/lib/supabase/client";
@@ -9,13 +9,15 @@ import type { OrderItem } from "@/lib/types";
 import type { TableData } from "./use-table";
 
 const MAX_PORTIONS = 10;
+const MAX_QUANTITY = 99;
 
 /**
- * OTC-32: change who shares an item after it's been ordered, and give people
- * more portions (e.g. Ana had 2 slices, Ben had 1). The database checks who
- * may change it and takes a sent bill back if needed (set_item_sharing).
+ * Edit an item after it's been ordered (OTC-27): quantity, notes, and who
+ * shares it with portions (OTC-32, e.g. Ana had 2 slices, Ben had 1). The
+ * database checks who may change it, takes a sent bill back if needed, and
+ * tells the orderer when the host changed their item (edit_order_item).
  */
-export function ShareEditor({
+export function ItemEditor({
   item,
   data,
   meId,
@@ -32,6 +34,8 @@ export function ShareEditor({
       current.map((a) => [a.participant_id, a.share_weight || 1]),
     ),
   );
+  const [quantity, setQuantity] = useState(item.quantity);
+  const [notes, setNotes] = useState(item.notes);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -42,7 +46,7 @@ export function ShareEditor({
   const total =
     item.unit_price_centavos === null
       ? null
-      : item.unit_price_centavos * item.quantity;
+      : item.unit_price_centavos * quantity;
   const preview =
     total !== null && chosen.length
       ? allocate(
@@ -51,6 +55,10 @@ export function ShareEditor({
         )
       : null;
   const billSent = data.session.status === "billing";
+  const someoneElses = item.added_by !== meId;
+  const ordererName =
+    data.participants.find((p) => p.id === item.added_by)?.display_name ??
+    "They";
 
   const toggle = (pid: string) =>
     setWeights((w) => {
@@ -72,8 +80,10 @@ export function ShareEditor({
     if (!chosen.length || busy) return;
     setBusy(true);
     setError("");
-    const { error } = await getSupabase().rpc("set_item_sharing", {
+    const { error } = await getSupabase().rpc("edit_order_item", {
       p_item_id: item.id,
+      p_quantity: quantity,
+      p_notes: notes.trim(),
       p_people: chosen.map((p) => ({
         participant_id: p.id,
         weight: shared ? weights[p.id] : 1,
@@ -86,6 +96,51 @@ export function ShareEditor({
 
   return (
     <div className="mt-3 flex flex-col gap-3 border-t border-line pt-3">
+      <div className="flex items-end gap-3">
+        <div>
+          <Label>Quantity</Label>
+          <div className="flex h-12 items-center rounded-xl border border-line bg-surface">
+            <button
+              type="button"
+              aria-label="Fewer"
+              className="h-full w-11 text-xl disabled:opacity-30"
+              disabled={quantity <= 1}
+              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+            >
+              −
+            </button>
+            <span className="w-8 text-center font-semibold tabular-nums" aria-live="polite">
+              {quantity}
+            </span>
+            <button
+              type="button"
+              aria-label="More"
+              className="h-full w-11 text-xl disabled:opacity-30"
+              disabled={quantity >= MAX_QUANTITY}
+              onClick={() => setQuantity((q) => Math.min(MAX_QUANTITY, q + 1))}
+            >
+              +
+            </button>
+          </div>
+        </div>
+        {total !== null && (
+          <p className="pb-3 text-sm tabular-nums text-ink-soft">
+            {formatMoney(total, data.session.currency)}
+          </p>
+        )}
+      </div>
+
+      <div>
+        <Label htmlFor={`notes-${item.id}`}>Notes</Label>
+        <Input
+          id={`notes-${item.id}`}
+          value={notes}
+          maxLength={200}
+          placeholder="e.g. no onions, extra rice"
+          onChange={(e) => setNotes(e.target.value)}
+        />
+      </div>
+
       <div>
         <Label>Who&apos;s sharing this?</Label>
         <div className="flex flex-wrap gap-2">
@@ -167,9 +222,10 @@ export function ShareEditor({
       )}
 
       {!chosen.length && <Notice tone="warn">Pick at least one person.</Notice>}
-      {billSent && (
+      {(billSent || someoneElses) && (
         <p className="text-xs text-ink-soft">
-          The bill goes back to the host to send again.
+          {someoneElses ? `${ordererName} will be told in the app. ` : ""}
+          {billSent ? "The bill goes back to the host to send again." : ""}
         </p>
       )}
       {error && <Notice tone="error">{error}</Notice>}
